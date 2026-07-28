@@ -13,11 +13,8 @@
 ### Step A.0 — PoC workspace scaffold — *Owner: Agent*
 **Goal:** a scratch project where all PoC scripts live, plus the results ledger.
 **Actions:**
-1. Create folder `ai-test-fix-agent/` with `scripts/`, `tracks/enovia/`, `samples/`, `tests/`.
-   > ⚠ **CONFIRM (Jay):** `ai-test-fix-agent` is a **real Bitbucket repo slug**, so it is deliberately
-   > left unrenamed under R1 — renaming it here without renaming it in Bitbucket would create a false
-   > record. Is the repo being renamed to `jarvis`? — placeholder, not a fact.
-2. Create `.env.example` with keys: `JIRA_BASE_URL=` *((User) provides the exact base URL where the tickets live)*, `JIRA_PAT=`, `BITBUCKET_BASE_URL=https://bitbucket.it.keysight.com`, `BITBUCKET_PAT=`, `DAI_BASE_URL=`, `DAI_CLIENT_ID=`, `DAI_CLIENT_SECRET=`, `DAI_AUTH_URL=` *(OAuth2 token endpoint, typically `{DAI_BASE_URL}/auth/realms/eggplant/protocol/openid-connect/token`)*, `DAI_LOG_BY_RUNID_URL=` *((User) provides the tested endpoint at A.1, typically `{DAI_BASE_URL}/ai/runlogs/{runid}`)*, `DAI_SCREENSHOT_URL=` *((User) provides at A.1, typically `{DAI_BASE_URL}/api/v2/screenshots/{image_id}`)*, `JARVIS_REPO_URL=` *(the validation repo `agentic-eggplant-automation`)*, `JARVIS_PAT=`, `JARVIS_DAI_BASE_URL=`, `JARVIS_DAI_CLIENT_ID=`, `JARVIS_DAI_CLIENT_SECRET=`, `JARVIS_BRANCH=Enovia`, `JARVIS_ENOVIA_SUITES_PATH_IN_VM=C:\Eggplant_Suites`, `JARVIS_COMPLETION_MODE=poll_backoff`, `ANTHROPIC_API_KEY=`, `ANTHROPIC_BASE_URL=` *(direct API or the Keysight gateway)*, `MODEL=claude-opus-4-7` *(the ONLY reasoning model — 4-7 because 4-6 isn't whitelisted on the Keysight gateway; the proven whitelisted Opus IDs are 4-5 and 4-7; we use the newer; see plan_master §6)*, `MODEL_LIGHT=` *(optional, non-reasoning utility only; leave empty to disable)*. Every script that reads this file MUST use `load_dotenv(override=True)` so the project `.env` wins over any parent-shell env vars (plan_master §6.10).
+1. At the **repo root** (which **is** the project root — the Bitbucket repo is `jarvis`, so there is no nested project directory), create `scripts/`, `tracks/enovia/`, `samples/`, `tests/`.
+2. Create `.env.example` with keys: `JIRA_BASE_URL=` *((User) provides the exact base URL where the tickets live)*, `JIRA_PAT=`, `BITBUCKET_BASE_URL=https://bitbucket.it.keysight.com`, `BITBUCKET_PAT=`, `DAI_BASE_URL=`, `DAI_CLIENT_ID=`, `DAI_CLIENT_SECRET=`, `DAI_AUTH_URL=` *(OAuth2 token endpoint, typically `{DAI_BASE_URL}/auth/realms/eggplant/protocol/openid-connect/token`)*, `DAI_LOG_BY_RUNID_URL=` *((User) provides the tested endpoint at A.1, typically `{DAI_BASE_URL}/ai/runlogs/{runid}`)*, `DAI_SCREENSHOT_URL=` *((User) provides at A.1, typically `{DAI_BASE_URL}/api/v2/screenshots/{image_id}`)*, `JARVIS_REPO_URL=` *(the validation repo `agentic-eggplant-automation`)*, `JARVIS_PAT=`, `JARVIS_DAI_BASE_URL=https://eggptdai10.cos.is.keysight.com:8000/`, `JARVIS_DAI_CLIENT_ID=`, `JARVIS_DAI_CLIENT_SECRET=`, `JARVIS_BRANCH=Enovia`, `JARVIS_ENOVIA_SUITES_PATH_IN_VM=C:\Eggplant_Suites`, `JARVIS_COMPLETION_MODE=poll_backoff`, `ANTHROPIC_API_KEY=`, `ANTHROPIC_BASE_URL=` *(direct API or the Keysight gateway)*, `MODEL=claude-opus-4-7` *(the ONLY reasoning model — 4-7 because 4-6 isn't whitelisted on the Keysight gateway; the proven whitelisted Opus IDs are 4-5 and 4-7; we use the newer; see plan_master §6)*, `MODEL_LIGHT=` *(optional, non-reasoning utility only; leave empty to disable)*. Every script that reads this file MUST use `load_dotenv(override=True)` so the project `.env` wins over any parent-shell env vars (plan_master §6.10).
    **Retired keys — do not reintroduce:** the old scalar `PRACTICE_TEST_CONFIG_ID` is **deleted**, superseded by the per-suite registry file `tracks/enovia/test_config_registry.yaml` (decision **D3**, plan_master §2.3.2) — one test config per suite, looked up at runtime, so a single global config ID no longer expresses the mapping. `PRACTICE_STEP_SELECTION` is likewise **resolved and removed**: decision **D1** (the dispatcher pattern) makes per-ticket step selection unnecessary, because the test config stays permanently static and only the dispatcher script's target line changes, via git.
 3. Create `tracks/enovia/poc_results.md` with a checklist mirroring Gate 0a (every PoC, a Proven? box, and a Notes column).
 4. Create `requirements-poc.txt`: `httpx anthropic pyyaml python-dotenv rich`.
@@ -48,7 +45,7 @@
 | Role | Value |
 |---|---|
 | Production DAI (evidence, READ-ONLY) | `epcorpappsdai12`, DAI **25.3.1+0** |
-| JARVIS DAI (execution) | DAI **26.2.2**, dedicated Jay-administered VM — host observed as `eggptdai10.cos.is.keysight.com:8000` (⚠ CONFIRM, plan_master §3) |
+| JARVIS DAI (execution) | DAI **26.2.2**, Jay-administered. **Base URL `https://eggptdai10.cos.is.keysight.com:8000/` — HTTPS, port 8000.** Same VM as the Design + Run agents, `C:\Eggplant_Suites` and (at `:8080`) the JARVIS orchestrator itself (plan_master §3) |
 | Validation repo / branch | `bitbucket.it.keysight.com/scm/eggauto/agentic-eggplant-automation.git` / **`Enovia`**; git remote name `agentic-eggplant-automation` |
 | Production repo / branch | `enovia-plm-test-automation.git` / `Testing_Mar10`; git remote name `origin` |
 | Agents | `Test26_2_Design` + a Run environment, **co-located on the JARVIS VM**, licensed **EPF 26.2.x** |
@@ -88,11 +85,11 @@ GET /api/v2/screenshots/{screenshot_id}               → PNG (PoC-2 walk-back l
 | ID | Open item |
 |---|---|
 | **O1** | Webhook profile not yet registered on JARVIS (`poll_backoff` is the day-one mode). |
-| **O2** | Suite-name collision behaviour as suites accumulate on the JARVIS instance (constraint C3 — see the ⚠ CONFIRM at plan_master §2.3.1). |
+| **O2** | Suite-name collision behaviour as suites accumulate on the JARVIS instance (**constraint C2** — suite names must be globally unique per DAI instance; plan_master §2.3.1). |
 | **O3** | Per-cycle wall-clock timing across a realistic suite set — needed for the plan2 Gate 2 "avg fix+validation time" row. |
 | **O4** | Scale-out: only `Part_Master_Pack_01` is onboarded. Every other suite needs the D2 onboarding sequence (Step B.4b). |
-| **O5** | Force-push semantics vs. multi-suite dispatchers: force-pushing the full candidate state onto `Enovia` replaces the branch contents, so dispatchers for suites *other than* the target suite disappear unless regenerated. |
-| **O6** | The **policy decision** arising from O5. ⚠ **CONFIRM (Jay):** recommended invariant — *regenerate dispatchers for every registered suite on every push, so the branch is always complete.* Recorded as a **recommendation, not settled fact** — placeholder pending your ruling. |
+| **O5** | ⚠️ **MITIGATED by the O6 decision** (not closed — the underlying mechanic stands). Force-pushing the full candidate state onto `Enovia` replaces the branch contents, so dispatchers for suites *other than* the target suite disappear unless regenerated. Regenerating **every** registered suite's dispatcher on every push is what removes the risk. |
+| **O6** | ✅ **RESOLVED 2026-07-28.** Every registered suite has its **own** dispatcher script **and its own test config** executing that dispatcher; on **every** push JARVIS regenerates the dispatcher for **every suite in the registry**, so the `Enovia` branch is always complete. This is a **rule**, not a recommendation (plan_master §2.3.2 D4, plan2 §2.5.0). |
 | **O7** | Monthly model re-import from the production DAI into JARVIS is currently an **undocumented manual activity** and must become a written maintenance procedure performed by Jay every time (`docs/maintenance.md`, plan3 §3.7). Person-dependency. |
 
 ### Step A.2b — Dispatcher pattern proof (dynamic target selection) — *Owner: Agent + (User)* — **✅ PROVEN**
@@ -157,7 +154,7 @@ using the dai apis used in the automated JIRA ticket creation initiative to fetc
 **Two repos, two permission sets — do not conflate:**
 - **This step proves read / branch / PR against the *production* repo path** (`enovia-plm-test-automation`, project `EGGAUTO`). That is the plan3 PR target, written only as `Jarvis-fix/<TICKET>` after PASS + approval.
 - **Push access to the *validation* repo** (`agentic-eggplant-automation`, branch `Enovia`) is a **separate PAT / permission** and must be confirmed independently — the validation gate force-pushes there on every cycle, which is a different right from opening a PR.
-> ⚠ **CONFIRM (Jay):** what PAT scopes does the validation repo require for a force-push to `refs/heads/Enovia` (Repo Write plus any branch-permission exemption, given force-push is normally restricted)? Is it the same PAT as the production repo or a separate one? — placeholder, not a fact.
+**Validation-repo permission — settled.** Jay holds **admin** on the validation repo, and force-push to `refs/heads/Enovia` with the configured PAT (`JARVIS_PAT`) **works**. No branch-permission exemption is outstanding.
 
 **Verification:** read returns content; branch 201; PR 201 (sandbox); a force-push to the validation repo's `Enovia` branch succeeds with the credential recorded as `JARVIS_PAT`.
 **DoD:** read + branch + PR proven on the production repo path; **validation-repo force-push permission separately confirmed**; both PAT scopes recorded.
@@ -168,14 +165,23 @@ using the dai apis used in the automated JIRA ticket creation initiative to fetc
 **Verification:** read/comment/attach succeed; transitions listed; **all four metadata fields extracted correctly from every provided real ticket** (the LLM's `reasoning` line for each ticket is human-checked and recorded). The script also runs end-to-end against TESTAUTOMA-8055 producing the same runid that PoC 2 then uses downstream.
 **DoD:** v2 confirmed; LLM-extraction prompt + tool schema recorded in `poc_results.md`; per-ticket extraction results recorded; note whether the service account can transition status — if not, **label is the reliable signal** (plan3 relies on this).
 
-### Step A.9 — PoC 6: Claude reproduces the TESTAUTOMA-8055 diagnosis from the VM — *Owner: Agent + (User)*
-**Goal:** prove engine + VM egress to `api.anthropic.com` on the golden bug.
+### Step A.9 — PoC 6: Claude reachable with working credentials — *Owner: Agent* — **✅ PROVEN (connectivity, from the development machine)**
+**Goal:** prove the engine is reachable and the credentials work — `MODEL` (Opus 4.7) answers through `ANTHROPIC_BASE_URL` (the Keysight gateway).
 **Actions:**
 1. **(User)** place into `samples/`: the 8055 test script, `CommonEnovia.script` (incl. ~line 409), and the DAI failure-log excerpt.
-2. Agent: write `scripts/poc_claude.py` — a draft diagnosis system prompt (full version in plan1) + user message embedding ticket/script/handler/logs with untrusted-data delimiters; call **`MODEL` (Opus 4.7)** via `ANTHROPIC_BASE_URL` (proves the gateway path too, if used); print the diagnosis.
-3. **(User)** run **from the orchestrator VM**; paste output.
-**Verification:** the diagnosis names `CommonEnovia.script` ~409 and the `and not ImageFound(text:"Name",…)` clause, with the "passed-with-swallowed-exceptions" observation.
-**DoD:** correct root cause reproduced from the VM. If egress fails, **(User)** files the firewall ticket now.
+2. Agent: write `scripts/poc_claude.py` — a draft diagnosis system prompt (full version in plan1) + user message embedding ticket/script/handler/logs with untrusted-data delimiters; call **`MODEL` (Opus 4.7)** via `ANTHROPIC_BASE_URL` (proves the gateway path too); print the response.
+3. Run it from the **development machine**; paste output.
+**Verification:** a successful authenticated call returns a response — engine reachable, credentials valid, gateway path working.
+**DoD:** ✅ **met.** Opus 4.7 answered through the Keysight gateway, after root-causing the `claude-opus-4-6` whitelist gap and the `load_dotenv(override=True)` masking (PROGRESS 2026-06-12).
+
+> **Two claims this step deliberately does NOT make, and where each is actually discharged:**
+> - **It was not run on a VM.** VM egress to the gateway is verified in **Step B.7**, where the full
+>   integration set runs on `eggptdai10` for the first time. If egress fails there, **(User)** files
+>   the firewall ticket at that point.
+> - **It did not re-derive the 8055 diagnosis.** Reproducing the root cause — naming
+>   `CommonEnovia.script` ~409 and the `and not ImageFound(text:"Name",…)` clause with the
+>   "passed-with-swallowed-exceptions" observation — is **plan1's golden regression** (plan1 §1.4.5
+>   Verification, scored at Gate 1). It is not weakened, only verified where it belongs.
 
 ### Step A.10 — PoC 7: base-rate study (≥50 historical tickets) — *Owner: Agent + (User)*
 **Goal:** measure the real bug-type distribution; decides engine fit + whether vision moves up.
@@ -189,17 +195,17 @@ using the dai apis used in the automated JIRA ticket creation initiative to fetc
 Print and have the user confirm:
 | PoC | Proven? |
 |---|---|
-| 2 production-DAI log + error screenshot by `runid` (User's APIs) | ☐ |
+| 2 production-DAI log + error screenshot by `runid` (User's APIs) | ✅ **PROVEN** — PROGRESS 2026-06-12 (runid 30832, 402 log entries, error idx 384, 111 KB PNG) |
 | 2b **JARVIS validation path**: push `agentic-eggplant-automation@Enovia` → SHA assert → trigger the suite's test config → fetch results → executed-SHA assert | ✅ **PROVEN** |
 | 2b-bis **Dispatcher pattern (A.2b)**: target switched purely by git push, DAI test config untouched | ✅ **PROVEN** |
 | 1 runscript headless + results folder | n.a. (deferred) |
 | 1b SUT outside DAI → **`VALIDATION_MECHANISM=jarvis-dai` recorded** | n.a. (deferred) |
 | 1e runscript ≡ DAI parity *(local-runscript path only)* | n.a. (deferred) |
-| 3 static call-graph + ripgrep | ☐ |
-| 4 Bitbucket read/branch/PR | ☐ |
-| 5 Jira read/comment/attach + **runid extraction rule** | ☐ |
-| 6 Claude (Opus 4.6) reproduces 8055 from VM | ☐ |
-| 7 base rate supports approach | ☐ |
+| 3 static call-graph + ripgrep | ☐ **not done** — plan0 B.4 builds it properly regardless |
+| 4 Bitbucket read/branch/PR | ☐ **not done** — **must smoke before plan3 §3.2** |
+| 5 Jira read/comment/attach + **runid extraction rule** | ✅ **PROVEN** — PROGRESS 2026-06-12 (Jira REST v2 fetch + LLM runid extraction) |
+| 6 **Claude reachable with working credentials** | ✅ **PROVEN (connectivity, from the development machine)** — Opus 4.7 through the Keysight gateway, after the `claude-opus-4-6` whitelist and `load_dotenv(override=True)` root-cause (PROGRESS 2026-06-12). **Not** run on a VM (that folds into B.7) and did **not** re-derive the 8055 diagnosis (that is plan1's golden regression) |
+| 7 base rate supports approach | ☐ **not done** — Gate 1 cannot be *scored* without it |
 | dedicated EPF license + RDP SUT secured **(User)** | ☐ |
 **Rule:** **PoC 7** must pass, **PoC 2 + 5** (the runid evidence chain) must pass, and **the JARVIS validation path (PoC 2b + A.2b) must pass** — JARVIS is the single mandated validation mechanism, so the old either/or with the local `runscript` loop no longer applies. **Both are proven.** If the validation path, the evidence chain, or the base rate fails → STOP and re-architect that part before any build. The rest are cheaper to work around.
 
@@ -210,14 +216,11 @@ Print and have the user confirm:
 ### Step B.1 — Project repo bootstrap — *Owner: Agent + (User)*
 **Goal:** the agent's own repo, exactly per the master layout (§4).
 **Actions:**
-1. **(User)** create Bitbucket repo `ai-test-fix-agent` (under `EGGAUTO` or a new `AIAGENT` project); default branch `main`; require ≥1 PR approval; generate a PAT (Repo R/W, PR R/W, Branch create).
-   > ⚠ **CONFIRM (Jay):** `ai-test-fix-agent` is a **real Bitbucket repo slug** and is deliberately left
-   > unrenamed under R1 (here and in the `pyproject.toml` `name =` field below). Is the repo being
-   > renamed to `jarvis` in Bitbucket? — placeholder, not a fact.
+1. **The Bitbucket repo `jarvis` already exists and is empty.** What remains for the **(User)** is to confirm: the default branch, the **≥1 PR approval** rule, and a PAT (Repo R/W, PR R/W, Branch create). *(This repo's `origin` points at `jarvis` — distinct from the Enovia working copy's `origin`, which points at `enovia-plm-test-automation`; see plan_master §4.1.)*
 2. Agent: create the full directory tree from master §4 (empty `__init__.py` everywhere), `README.md`, `PROGRESS.md`, `.gitignore` (`.env`, `data/`, `*.log`, `.venv/`, `node_modules/`, `webapp/dist/`), and `pyproject.toml`:
 ```toml
 [project]
-name = "ai-test-fix-agent"
+name = "jarvis"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115","uvicorn[standard]>=0.30","sse-starlette>=2.0",
@@ -233,7 +236,7 @@ dev = ["pytest>=8","pytest-asyncio>=0.24","pytest-httpx>=0.30","ruff>=0.7","mypy
 jarvis:                                     # the JARVIS validation gate — plan_master §2.3
   repo_url: <JARVIS_REPO_URL>               # agentic-eggplant-automation
   branch: Enovia                            # force-push target for every validation cycle
-  dai_base_url: <JARVIS_DAI_BASE_URL>       # JARVIS DAI 26.2.2 — NOT the production DAI
+  dai_base_url: https://eggptdai10.cos.is.keysight.com:8000/   # JARVIS DAI 26.2.2 — NOT the production DAI
   auth:                                     # v2 client-credentials; ~10-min bearer, cached + refreshed
     mode: v2_client_credentials
     token_path: /api/v2/auth
@@ -292,14 +295,25 @@ jarvis:                                     # the JARVIS validation gate — pla
 5. **Author the dispatcher model action** `AgentDispatcher` and attach the snippet.
 6. **Create the test case**: `cleanupSUT` + `AgentDispatcher`.
 7. **Create the model-based test config**: SUT **by name**, **reruns OFF**, **generous run timeout**. Reruns must be off or a flaky retry would mask a real target failure.
-8. **Record `TEST_CONFIG_ID`** for the suite in `tracks/enovia/test_config_registry.yaml` (**D3**). This mapping — *which test config to trigger for a script change in which suite* — **is provided by the (User), Jay**.
+8. **Add the suite's row to `tracks/enovia/test_config_registry.yaml`** (**D3** — the file exists; adding a suite is a **data** change, never a code change). This mapping — *which test config to trigger for a script change in which suite* — **is provided by the (User), Jay**. Every field is required; in particular a suite with **no `smoke_target` is a hard error at onboarding time**, because every push regenerates *every* registered suite's dispatcher (F8) and the non-target ones still need a valid target line.
 9. **One smoke run** through the gate to confirm the registry entry resolves and the suite executes.
-10. **Re-check O2** (suite-name collisions) as suites accumulate on the JARVIS instance.
+10. **Re-check O2** (suite-name collisions, **constraint C2** — names must be globally unique per DAI instance) as suites accumulate on the JARVIS instance.
 
-> ⚠ **CONFIRM (Jay):** the `PartMaster` `TEST_CONFIG_ID` value is not recorded here — placeholder, not a fact. Please supply it (and each subsequent suite's ID) for `tracks/enovia/test_config_registry.yaml`.
+**The onboarded PartMaster row (the worked example, already in the registry):**
+
+```yaml
+  PartMaster:
+    suite_dir: PartMaster.suite                              # exact directory name in the validation repo
+    model: Part_Master_Pack_01                               # JARVIS DAI model the config is built on
+    test_config_id: 0310ac5d-c0c5-49dc-8b04-44c42a33d84e     # triggered by ID via the DAI API
+    dispatcher_script: PartMaster_AgentDispatcher.script     # generated every push — never in the production repo
+    smoke_target: TestCases/TESTAUTOMA_6167_VerifyDownloadTemplateOptionFromPartMasterWidget
+    onboarded: 2026-07-28
+    status: proven                                           # A.2 + A.2b, full PASSED run with SHA traceable
+```
 
 **Verification:** the registry entry resolves for the target suite, and a smoke run **PASSES** with the executed commit SHA traceable in the run log.
-**DoD:** at least **`PartMaster` onboarded — ✅ done** (`Part_Master_Pack_01`, proven in A.2/A.2b). Remaining suites tracked as open item **O4**; each needs this full sequence.
+**DoD:** at least **`PartMaster` onboarded — ✅ done** (`Part_Master_Pack_01`, test config `0310ac5d-c0c5-49dc-8b04-44c42a33d84e`, proven in A.2/A.2b). Remaining **16** suites tracked as open item **O4**; each needs this full sequence.
 
 ### Step B.5 — Evidence retrieval validation — *Owner: (User), scripts by Agent*
 **Goal:** prove the evidence path with **no** SharePoint/Azure AD.
@@ -322,8 +336,9 @@ jarvis:                                     # the JARVIS validation gate — pla
 **DoD:** state store + bus tested; a fake run's events fully replayable from the DB.
 
 ### Step B.7 — Integration smoke test + GATE 0b — *Owner: Agent + (User)*
-**Goal:** one script exercises every integration from `aiagent-testmanager`.
-**Actions:** the Agent writes `scripts/test_integrations.py` printing a ✓/✗ table: Jira read + **runid extraction on a real ticket** · Bitbucket read + sandbox branch · **production**-DAI log+screenshot by runid · **JARVIS validation dry-run** (push a no-op commit to `agentic-eggplant-automation@Enovia`, **assert `git ls-remote` equals the pushed SHA**, trigger the registry's test config for the suite, poll to completion via `poll_backoff`, fetch the results chain, **assert the run log's `Using Git commit SHA` equals the pushed SHA**) · runscript smoke (1-line script on the runner — *deferred; skip unless the local-runscript variant is revived*) · Claude (Opus 4.6 via configured base URL) ping · static call-graph on the 8055 script · ripgrep blast radius · lint on a sample script · SQLite store round-trip. **(User)** run it on the VM; paste the table.
+**Goal:** one script exercises every integration from **`eggptdai10`** — the JARVIS VM that hosts the DAI, the agents, `C:\Eggplant_Suites`, the working copy and the orchestrator itself.
+> **Where development actually happens.** Day-to-day development and unit testing run on the **(User)'s local machine**; VM deployment comes later. The inherently VM-bound steps — **B.2** provisioning, **B.4**'s clone + scheduled tasks, **B.4b**'s DAI authoring, and **this step** — stay **(User)-on-VM**. B.7 is **the first time the full integration set runs on the target host**, and that is precisely its value. Do not weaken it into a local run.
+**Actions:** the Agent writes `scripts/test_integrations.py` printing a ✓/✗ table: Jira read + **runid extraction on a real ticket** · Bitbucket read + sandbox branch · **production**-DAI log+screenshot by runid · **JARVIS validation dry-run** (push a no-op commit to `agentic-eggplant-automation@Enovia`, **assert `git ls-remote` equals the pushed SHA**, trigger the registry's test config for the suite, poll to completion via `poll_backoff`, fetch the results chain, **assert the run log's `Using Git commit SHA` equals the pushed SHA**) · runscript smoke (1-line script on the runner — *deferred; skip unless the local-runscript variant is revived*) · **Claude (Opus 4.6 via configured base URL) ping — this is the VM-egress verification folded in from A.9; if it fails, (User) files the firewall ticket now** · static call-graph on the 8055 script · ripgrep blast radius · lint on a sample script · SQLite store round-trip. **(User)** run it on the VM; paste the table.
 **GATE 0b checklist** (print; (User) confirms): repo+deps ☐ · both VMs provisioned, egress green ☐ · EPF license reserved, SUT reachable ☐ · Jira (incl. runid)/Bitbucket/production-DAI-evidence/Claude verified from VM ☐ · **JARVIS validation path triggers + completes** ☐ · runscript runs an Enovia script *(deferred — n.a. this version)* ☐ · **two remotes configured on the working copy: `origin` → `enovia-plm-test-automation`, `agentic-eggplant-automation` → `agentic-eggplant-automation`** ☐ · **`tracks/enovia/test_config_registry.yaml` populated and resolving for the target suite** ☐ · **pushed-SHA assert working at both edges (`git ls-remote` pre-trigger, `Using Git commit SHA` post-completion)** ☐ · handler_map + vocabulary + static modules + lint correct ☐ · context.md curated & reviewed ☐ · evidence retrieval proven (no SharePoint) ☐ · **`VALIDATION_MECHANISM=jarvis-dai` recorded** ☐ · hourly pull + nightly rebuild + `C:\Eggplant_Suites` pull scheduled ☐ · state store + event bus tested ☐.
 **DoD:** smoke test all-green. **Plan 1 cannot begin until Gate 0b passes.**
 
