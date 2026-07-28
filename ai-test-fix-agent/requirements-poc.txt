@@ -1,0 +1,6 @@
+httpx
+anthropic
+openai
+pyyaml
+python-dotenv
+rich

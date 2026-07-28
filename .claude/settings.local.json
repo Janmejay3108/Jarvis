@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"C:\\\\Users\\\\janmtiwa\\\\Desktop\\\\Initiative Latest\\\\ai-test-fix-agent\\\\.venv\\\\Scripts\\\\python.exe\" -m pip list)",
+      "Bash(findstr /I \"anthropic httpx python-dotenv rich pyyaml\")",
+      "Bash(nslookup jira.it.keysight.com)"
+    ]
+  }
+}
