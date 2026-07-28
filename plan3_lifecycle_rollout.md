@@ -1,19 +1,27 @@
-# PLAN 3 — LIFECYCLE, HARDENING & ROLLOUT (WEEKS 7–9) — v2 FOR CLAUDE CODE
+# PLAN 3 — LIFECYCLE, HARDENING & ROLLOUT (WEEKS 7–9) — v2 FOR THE AGENT
 
-> **Prereq:** GATE 2 passed. **Objective:** complete the ticket→PR pipeline and put the chat product into real use by Megha's team. Evidence = DAI/runscript screenshots + Jira attachments (no SharePoint/Azure AD). The **production** repo (`origin`) is written **only after** validation PASS (Practice gate) **and** in-chat approval. Every outcome is logged as a trajectory — the corpus that later powers NL-to-script generation.
+> **Prereq:** GATE 2 passed. **Objective:** complete the ticket→PR pipeline and put the **JARVIS (Automation Testing Agent)** chat product into real use by Megha's team. Evidence = JARVIS-run + production-DAI screenshots + Jira attachments (no SharePoint/Azure AD). The **production** repo `enovia-plm-test-automation` (`origin`) is written **only after** validation PASS on the **JARVIS gate** **and** in-chat approval. Every outcome is logged as a trajectory — the corpus that later powers NL-to-script generation.
 >
 > Build order: 3.1 evidence → 3.2 publisher/PR → 3.3 Jira lifecycle → 3.4 end-to-end + degradation + revert → 3.5 frontend completion → 3.6 metrics + flywheel → 3.7 maintenance → 3.8 NL-generation readiness → 3.9 rollout.
 
 ---
 
-## Phase 3.1 — Evidence packaging — *Owner: Claude Code*
+## Phase 3.1 — Evidence packaging — *Owner: Agent*
 `src/evidence/packager.py` — `EvidencePackager.build(run, validation_result) -> {screenshots: [paths ≤4 key failing/passing steps], log_excerpt: trim(head=60, tail=40, "… (trimmed) …"), dai_link: dai_result_url}`. Publish as an `artifact {kind: evidence}` event so the chat shows the bundle.
-**Verification:** a PASS run yields ≤4 openable screenshots + trimmed log + DAI link; zero Graph/SharePoint calls anywhere in the codebase (grep assert in tests).
+
+**Two evidence sources — name them explicitly so an implementer does not point the packager at the wrong instance:**
+1. **The JARVIS validation run** (JARVIS DAI 26.2.2) — the v2 results chain + screenshots produced by the gate (plan2 §2.5.2), plus `result_url` and `executed_sha`. This is the *proof the fix works*.
+2. **The original production-DAI evidence gathered during diagnosis** (production DAI 25.3.1+0, `epcorpappsdai12`) — the failing run's log excerpt + error screenshot fetched by `runid` (plan1 §1.2.3). This is the *proof of what was broken*.
+
+The two instances use **different auth schemes** and different clients; the packager consumes already-fetched artifacts from the run record rather than re-authenticating.
+**Verification:** a PASS run yields ≤4 openable screenshots + trimmed log + DAI link, **with both sources represented and correctly labelled**; zero Graph/SharePoint calls anywhere in the codebase (grep assert in tests).
 **DoD:** bundle assembled purely from DAI/runscript artifacts.
 
-## Phase 3.2 — Publisher: push branch + create PR (post-PASS, post-approval only) — *Owner: Claude Code ((User): live check)*
+## Phase 3.2 — Publisher: push branch + create PR (post-PASS, post-approval only) — *Owner: Agent ((User): live check)*
 ### Step 3.2.1 — `src/orchestrator/publisher.py`
-`push_fix_branch(ticket_key, wc_branch, message) -> (remote_branch, sha)`: in the working copy — `git add -A` · `commit -m` (message: `[AI Agent] Fix <TICKET>: <root cause one-liner>`) · `push -u origin wc/<T>:refs/heads/ai-fix/<TICKET> --force-with-lease` (**`origin` = the production repo** — first and only production write, distinct from the `practice` remote used by the gate; the push creates the remote branch; no separate branch API call) · `rev-parse HEAD`.
+`push_fix_branch(ticket_key, wc_branch, message) -> (remote_branch, sha)`: in the working copy — **exclude every generated dispatcher (see the D4 rule below)** · `git add -A` · `commit -m` (message: `[JARVIS] Fix <TICKET>: <root cause one-liner>`) · `push -u origin wc/<T>:refs/heads/Jarvis-fix/<TICKET> --force-with-lease` (**`origin` = the production repo `enovia-plm-test-automation`** — first and only production write, distinct from the `agentic-eggplant-automation` remote used by the validation gate; the push creates the remote branch; no separate branch API call) · `rev-parse HEAD`.
+
+> **D4 — hard rule (binding).** The publisher **must exclude every generated `*_AgentDispatcher.script`** from the pushed branch, and **must assert that none is present in the diff before pushing**. Dispatchers are validation scaffolding generated per cycle (plan2 §2.5.0); they exist only on `agentic-eggplant-automation@Enovia`. **A dispatcher reaching the production repo is a defect** — fail the publish rather than push one.
 ### Step 3.2.2 — `bitbucket_client.create_pull_request(source, target, title, description)` — Server/DC REST 1.0 `POST …/pull-requests` with `fromRef/toRef` `{id: refs/heads/<b>, repository:{slug, project:{key}}}`.
 ### Step 3.2.3 — PR description builder (auto, from run data):
 ```
@@ -21,19 +29,19 @@
 ## Root cause   {diagnosis.root_cause}  (category {category} · confidence {fix.confidence})
 ## Changes      - `{file}`: {explanation}
 ## Blast radius {fix.blast_radius_assessment}  (callers validated: {list})
-## Validation   lint: PASS · runscript: PASS (if local inner) · Practice gate: PASS (run {runid}) · attempt {n}/3
+## Validation   lint: PASS · JARVIS gate: PASS (test_config_result {id}, commit {sha}) · attempt {n}/3
 ## Review       1) change matches diagnosis  2) blast-radius callers above  3) approve & merge
-_Generated by AI Test Fix Agent — NOT auto-merged. Revert: dashboard button or comment `/agent revert`._
+_Generated by JARVIS — NOT auto-merged. Revert: dashboard button or comment `/agent revert`._
 ```
 Connect to Phase 2.7: on `approval.resolved: approve` → push → PR → publish `artifact {kind: pr, url}`.
-**Verification ((User)):** golden ticket through chat-approve → `ai-fix/TESTAUTOMA-8055` on Bitbucket with the one-line diff, PR targeting `Testing_Mar10`, full description; branch protection still demands human approval.
-**DoD:** push+PR happen only on PASS+approval; never auto-merged; description complete.
+**Verification ((User)):** golden ticket through chat-approve → `Jarvis-fix/TESTAUTOMA-8055` on the **production** Bitbucket repo with the one-line diff **and no `*_AgentDispatcher.script` present**, PR targeting `Testing_Mar10`, full description; branch protection still demands human approval.
+**DoD:** push+PR happen only on PASS+approval; never auto-merged; description complete; **the dispatcher-exclusion assert fires on a seeded dispatcher and blocks the push**.
 
-## Phase 3.3 — Jira lifecycle update — *Owner: Claude Code*
+## Phase 3.3 — Jira lifecycle update — *Owner: Agent*
 `src/orchestrator/jira_lifecycle.py`: post comment (root cause + change summary + PR link + DAI link), attach evidence screenshots + log excerpt, add label `ai-fixed`, **attempt** transition (e.g. → In Review) — if the service account lacks permission, skip silently (label is the reliable signal per PoC 5). Nothing here may fail the run: each call individually try/except-ed and logged.
 **DoD:** on a test ticket: comment + attachments + label appear; blocked transition skipped gracefully.
 
-## Phase 3.4 — End-to-end pipeline + graceful degradation + revert — *Owner: Claude Code ((User): fault drills)*
+## Phase 3.4 — End-to-end pipeline + graceful degradation + revert — *Owner: Agent ((User): fault drills)*
 ### Step 3.4.1 — Full wiring (`pipeline.py` + `lifecycle.py`), gated by `mode`:
 ```
 ticket → read → localize → fetch_logs → DIAGNOSE
@@ -47,22 +55,22 @@ ticket → read → localize → fetch_logs → DIAGNOSE
      └ rejected        → trajectory(negative + reviewer comment) → completed(rejected)
 ```
 ### Step 3.4.2 — Degradation rules (never lose work; each is a coded path with a test):
-1. Fix-gen fails → diagnosis-only fallback (`ai-diagnosis-only`). 2. Validation timeout (Practice gate TIMEOUT) / NO_LICENSE after backoff → diagnosis + attempted-branch note (`ai-needs-manual-validation`). 3. PR creation fails → post the pushed branch name to Jira so a dev opens the PR manually. 4. Jira update fails → branch+PR remain valid; failure logged + shown in chat. 5. Any late failure preserves all earlier artifacts (branch, evidence, diagnosis, transcript).
+1. Fix-gen fails → diagnosis-only fallback (`ai-diagnosis-only`). 2. Validation timeout (**JARVIS gate TIMEOUT**) / NO_LICENSE after backoff → diagnosis + attempted-branch note (`ai-needs-manual-validation`). 3. PR creation fails → post the pushed branch name to Jira so a dev opens the PR manually. 4. Jira update fails → branch+PR remain valid; failure logged + shown in chat. 5. Any late failure preserves all earlier artifacts (branch, evidence, diagnosis, transcript). **6. `STALE_SYNC` (UP-24 SHA mismatch at either edge — plan2 §2.5.2, plan4 §4.7.2) → the run **never claims a verdict**: post the diagnosis + the attempted branch name to Jira with the existing `ai-needs-manual-validation` label, preserve all artifacts, and surface the integrity failure in chat. A run whose executed commit cannot be tied to the pushed candidate is neither a PASS nor a FAIL.**
 ### Step 3.4.3 — One-click revert (`src/orchestrator/revert.py`)
 Per merged fix store `{ticket, branch, merge_sha, files}` (from the merge webhook, Phase 3.6). Trigger via chat command `revert TESTAUTOMA-XXXX` / RunCard button / Jira `/agent revert` comment (webhook): `git checkout -b revert/<TICKET> Testing_Mar10 && git revert --no-edit <merge_sha>` → push → open revert PR → notify chat + Jira. Blast-radius risk bounded to one click.
-**Verification:** golden ticket runs ticket→PR fully in a controlled test; **(User)** fault-injects each of the five degradation paths (kill Jira PAT, drop license, break PR call, …) and confirms behavior; a revert PR generates for a (sandbox-)merged fix.
-**DoD:** end-to-end green; all five degradation paths exercised; revert produces a valid PR.
+**Verification:** golden ticket runs ticket→PR fully in a controlled test; **(User)** fault-injects each of the **six** degradation paths (kill Jira PAT, drop license, break PR call, seed a SHA mismatch, …) and confirms behavior; a revert PR generates for a (sandbox-)merged fix.
+**DoD:** end-to-end green; all six degradation paths exercised; revert produces a valid PR.
 
-## Phase 3.5 — Frontend completion — *Owner: Claude Code*
+## Phase 3.5 — Frontend completion — *Owner: Agent*
 - **History:** sidebar lists conversations + standalone runs (status chips); opening one replays its full card timeline from the events table.
 - **Metrics page** (`/metrics` route in the app): charts + tables from `GET /api/metrics` (Phase 3.6) — runs over time, first/final pass rates **with CI bands**, PR acceptance, category breakdown, avg cost/time, hours-saved estimate, recent runs table.
 - **Run controls:** cancel button; revert button on merged runs; copy-PR-link.
 - **Quality pass:** loading/error states, empty states, mobile-usable layout, keyboard submit; `npm run build` clean; Lighthouse sanity.
 **DoD:** a new user can: start a fix, watch it, approve it, find it again tomorrow, see team metrics — without instructions.
 
-## Phase 3.6 — Metrics + flywheel logging + merge webhook [UP-11, UP-13] — *Owner: Claude Code ((User): webhook registration)*
+## Phase 3.6 — Metrics + flywheel logging + merge webhook [UP-11, UP-13] — *Owner: Agent ((User): webhook registration)*
 ### Step 3.6.1 — Trajectory logger (`src/flywheel/trajectory_logger.py`)
-Append one JSONL record per run to `data/trajectories/enovia.jsonl` (mirror summary row into SQLite for querying): `{ts, run_id, ticket, dai_runid, mode, category, context_files, call_chain, blast_radius_handlers, diagnosis, candidate_fixes, lint_results, runscript_result, practice_gate_result, final_patch, attempt, approval: {decision, comment}, pr_url, merged, dev_edits, tokens_in/out, cost_usd, duration_s, transcript_path}`.
+Append one JSONL record per run to `data/trajectories/enovia.jsonl` (mirror summary row into SQLite for querying): `{ts, run_id, ticket, dai_runid, mode, category, context_files, call_chain, blast_radius_handlers, diagnosis, candidate_fixes, lint_results, runscript_result, jarvis_gate_result, dispatcher_target, pushed_sha, executed_commit_sha, test_config_id, final_patch, attempt, approval: {decision, comment}, pr_url, merged, dev_edits, tokens_in/out, cost_usd, duration_s, transcript_path}`.
 > Why: a fix that passes DAI **and** merges unedited is a gold `(context, intent, verified_patch)` label; one the developer rewrote is a hard negative + correction. This corpus becomes, in order: (1) the living eval set, (2) few-shot/retrieval exemplars (UP-11 — the one place embeddings may later earn their keep), and only much later, if a measured prompting ceiling demands it, (3) training data. **Do not fine-tune now.**
 ### Step 3.6.2 — PR-merge webhook (`routes_webhooks.py`)
 **(User)** registers a Bitbucket repo webhook → `POST /api/webhooks/bitbucket` (shared-secret validated). On PR merged: set `merged=true`, compute `dev_edits` (diff agent branch vs merged result), store `merge_sha` for revert.
@@ -72,22 +80,26 @@ Implement `flywheel/retrieval.py` scoring: same category (+3), handler overlap (
 Aggregations from SQLite: totals, completion/fail, first-attempt & final pass rates (+Wilson CIs via `evals/wilson.py`), PR-acceptance, avg time, avg cost, by-category, by-week, hours-saved (configurable mins/ticket assumption), recent runs.
 **DoD:** every run appends a trajectory; merge webhook flips `merged`; metrics endpoint + page live; retrieval A/B recorded.
 
-## Phase 3.7 — Operational maintenance + context refresh automation — *Owner: Claude Code builds, (User) operates*
+## Phase 3.7 — Operational maintenance + context refresh automation — *Owner: Agent builds, (User) operates*
 - **Derived data is fully automatic:** the working copy pulls hourly; the **nightly scheduled job** (registered in plan0 §B.4) rebuilds `handler_map.yaml` + `handler_vocabulary.json` from the fresh clone — the agent's code knowledge never goes stale without human effort.
 - **Curated knowledge is human-approved, agent-assisted:** `context.md` is **never auto-rewritten**. Instead, after every merged AI fix, the pipeline drafts `tracks/enovia/context_suggestions/<TICKET>.md` (the new pattern learned: family, handler, fix shape, any rectangle/DPI discovery) for one-click human acceptance into `context.md` during the weekly review.
 - `scripts/verify_context.py` (weekly): diff `context.md`-documented handlers vs the repo (via handler_map + vocabulary); flag undocumented handlers; agent also self-reports unresolved handlers to `tracks/enovia/undocumented_handlers.txt`. Also: **re-run `scripts/run_eval.py` (10-ticket smoke subset) after any `context.md` or prompt change** [UP-10] — make this a documented rule in `docs/maintenance.md`.
+- **JARVIS operational maintenance (three additions to the existing cadence):**
+  1. **Monthly model re-import** from the **production** DAI into the **JARVIS** DAI. This is currently an **undocumented manual activity** and **must become a written maintenance procedure** in `docs/maintenance.md`, performed by **(User)** Jay every time. Recall **C4**: a model export restores internal structure but **not** suite links or test configs, so the re-import procedure must state which artifacts have to be re-verified (suite association) or re-authored afterwards. **Flagged as a person-dependency — open item O7:** the procedure exists only in one person's head until it is written down.
+  2. **Scheduled `git pull` for `C:\Eggplant_Suites`** on the JARVIS VM (registered in plan0 §B.4 action 1c), so the Design agent's local suites folder tracks the validation repo.
+  3. **Test-config registry upkeep** as suites are onboarded: every new suite adds an entry to `tracks/enovia/test_config_registry.yaml` via the plan0 §B.4b sequence (**O4** tracks the remaining suites), and each onboarding **re-checks O2** — suite-name collision behaviour as suites accumulate on the JARVIS instance (names must be globally unique per instance, **C2**).
 - Weekly 30-min cadence (Megha's lead): review chat-app failures, accept/reject context suggestions, run `verify_context.py`, log in `docs/maintenance_log.md`. **(User)** puts it on the calendar.
-**DoD:** `verify_context.py` flags a deliberately stale `context.md`; a merged fix produces a context suggestion draft; nightly rebuild verified; cadence scheduled; eval-on-change rule documented.
+**DoD:** `verify_context.py` flags a deliberately stale `context.md`; a merged fix produces a context suggestion draft; nightly rebuild verified; cadence scheduled; eval-on-change rule documented; **the monthly model re-import is written up in `docs/maintenance.md`**.
 
-## Phase 3.8 — NL-to-generation readiness (stubs only) [UP-12] — *Owner: Claude Code*
+## Phase 3.8 — NL-to-generation readiness (stubs only) [UP-12] — *Owner: Agent*
 No new product surface — just make the future path concrete:
 1. `mode: generate` reserved in intent/pipeline returning "coming soon" (flag-gated), with a written design note `docs/nl_generation_design.md`: staged path **repair → guided generation** (new test by analogy to a gold script, same handler vocabulary, TDD-style: generate → lint → runscript → iterate) **→ open generation** (sample N, filter by execution) — same retrieval + validation harness, no architecture change.
-2. `tracks/enovia/gold_scripts/`: **(User)** + track lead pick 5–10 exemplary tests (well-structured, current); Claude Code adds a manifest (purpose, handlers used, suite).
+2. `tracks/enovia/gold_scripts/`: **(User)** + track lead pick 5–10 exemplary tests (well-structured, current); the Agent adds a manifest (purpose, handlers used, suite).
 3. Vocabulary freshness check added to `verify_context.py`.
 **DoD:** design note reviewed by (User); gold scripts registered; generate mode stub returns gracefully.
 
-## Phase 3.9 — Production rollout (Megha's team) + GATE 3 — *Owner: (User), supported by Claude Code*
-**Week-9 sequence:** Day 1–2 Jay runs 5 fresh tickets end-to-end via the chat app; same-day fixes for any issue (Claude Code on standby for patches). Day 3 live demo to Megha's team on a real ticket. Day 4–5 the team uses the chat app on actual tickets.
+## Phase 3.9 — Production rollout (Megha's team) + GATE 3 — *Owner: (User), supported by Agent*
+**Week-9 sequence:** Day 1–2 Jay runs 5 fresh tickets end-to-end via the chat app; same-day fixes for any issue (the Agent on standby for patches). Day 3 live demo to Megha's team on a real ticket. Day 4–5 the team uses the chat app on actual tickets.
 **Guardrails:** 2–3 tickets/day max in week 1 · a developer always reviews the PR before merge · Jay watches every run in chat · any incorrect fix → immediate investigation + prompt/`context.md` iteration + eval rerun · SUT lock keeps runs serialized · `approval_mode` stays `manual`.
 
 **GATE 3 — PROJECT COMPLETION (print; (User) confirms):**
@@ -101,9 +113,10 @@ No new product surface — just make the future path concrete:
 | Jira comment + label on all runs | yes | ☐ |
 | Approval flow used; revert demonstrated to team | yes | ☐ |
 | Trajectory corpus accumulating; merge webhook live | yes | ☐ |
+| Executed-commit SHA asserted on every validation run | yes | ☐ |
 | Metrics page accurate; cost honest ($2–6/ticket, Opus 4.6) | yes | ☐ |
 
-**PROJECT DEFINITION OF DONE:** a developer opens the SSO chat app, types `fix TESTAUTOMA-XXXX`, and watches the agent extract the runid → fetch the DAI error log + screenshot → localize (static) → diagnose (agentic, Opus 4.6) → patch minimally → pass lint → inner validation → the Practice gate → request approval in chat, then push `ai-fix/<TICKET>`, open the PR with diagnosis + evidence, update Jira, and log the trajectory — with one-click revert available and Gate 3 met with CIs and zero post-merge regressions.
+**PROJECT DEFINITION OF DONE:** a developer opens the SSO chat app, types `fix TESTAUTOMA-XXXX`, and watches JARVIS extract the runid → fetch the **production** DAI error log + screenshot → localize (static) → diagnose (agentic, Opus 4.6) → patch minimally → pass lint → **validate on the JARVIS gate** (force-push to `agentic-eggplant-automation@Enovia`, assert the pushed SHA, trigger the suite's test config, assert the executed commit SHA) → request approval in chat, then push `Jarvis-fix/<TICKET>` to the **production** repo, open the PR with diagnosis + evidence, update Jira, and log the trajectory — with one-click revert available and Gate 3 met with CIs and zero post-merge regressions.
 
 ---
 
