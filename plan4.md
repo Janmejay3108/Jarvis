@@ -1,4 +1,4 @@
-# PLAN 4 — HARDENING & TRUST LAYER — v1 FOR CLAUDE CODE
+# PLAN 4 — HARDENING & TRUST LAYER — v1 FOR THE AGENT
 
 > **Prereq:** GATE 2 passed (plans 0–2 executed as written). **Objective:** promote the lessons of the five Sprint-17 post-mortems (TESTAUTOMA-8278, -8448, -8449, -8450 ×2) from findings into built, tested subsystems: a triage gate that routes before fixing, diagnose-only outcomes scored as wins, a signature-based validation verdict immune to flakes, a human-question channel with permanent memory, and Jira autonomy that is earned rather than assumed.
 >
@@ -24,7 +24,7 @@
 | UP-21 | **Divergent-mechanism candidate** | At attempt ≥2, one N-best slot proposes an alternative mechanism (prefer non-visual oracle) | 8448: the real fix was OCR→disk-check, not a minimal diff |
 | UP-22 | **Failure clustering / dedup** | Signature hash checked against active runs, trajectories, open tickets before spawning work | One app UI change breaks N tests identically (8278 shape) |
 | UP-23 | **Graduated Jira autonomy** | All diagnosis comments human-gated through chat; a precision metric unlocks auto mode | One wrong comment in week 1 costs more trust than ten silent tickets |
-| UP-24 | **Practice-run integrity check** | Verify the triggered run executed the pushed commit before trusting PASS/FAIL | Force-push + pre-wired git sync can silently validate stale code |
+| UP-24 | **JARVIS-run integrity check** | **Double assert** that the triggered run executed the pushed commit before any PASS/FAIL is trusted: `git ls-remote agentic-eggplant-automation refs/heads/Enovia` == pushed SHA **before** trigger, and the run log's `Using Git commit SHA: '<sha>'` == pushed SHA **after** completion. Both are mandatory; a mismatch yields `STALE_SYNC`, never a verdict | Force-push + pre-wired git sync can silently validate stale code. Now fully implementable: PoC 2b proved the run log records the commit SHA and the git connection syncs at run start |
 | UP-25 | **Git history tools + pre-apply freshness** | blame / file-log / diff-since-green tools; re-diff shared targets before apply | 8449 root-caused via commit c47ef962; 8448 mid-flight handler collision |
 
 ## 0.2 Global invariants added by plan 4 (enforced in code, extend master §6.4's list)
@@ -35,13 +35,17 @@
 
 ---
 
-## Phase 4.0 — Carry-along choices while executing plans 0–2 — *Owner: (User) + Claude Code*
+## Phase 4.0 — Carry-along choices while executing plans 0–2 — *Owner: (User) + Agent*
 
 > These items require **zero edits** to plan files 0–3. They are runtime choices inside artifacts those plans already tell you to create (config values, a labeling sheet, PoC questions). Skipping any of them breaks nothing — it only duplicates work later; the cost of skipping is stated per item so the choice is informed.
 
 1. **Interpretation rule for plans 0–3:** any literal "Opus 4.6" / `claude-opus-4-6` remaining in the v2 plan texts means "the configured Opus model (`settings.model`)." Apply mentally while executing; do not edit the files. *(Cost of skipping: momentary confusion; zero rework.)*
 2. **PoC 7 labeling sheet (plan0 A.10):** when writing `scripts/categorize_tickets.py`, include three extra columns per ticket — `families_present[]` + `multi_cause: bool`; `knowledge_source ∈ {self_contained, documentable, external}`; `fixable_component: bool` (ticket contained ≥1 self-contained code-logic sub-failure). Label the ≥50 tickets **once**, with all columns. Phase 4.1's router evaluation consumes them. *(Cost of skipping: a human re-labels ≥50 tickets by hand later.)*
-3. **PoC 2b two extra questions (plan0 A.2):** while proving the Practice path, also record in `poc_results.md`: (a) are DAI webhook notifications enabled globally / is admin access available to enable them (they are an admin-level DAI setting); (b) does the run result/metadata expose the git commit it executed, and does the test config's git connection sync at run start (not a cached clone)? *(Cost of skipping: repeating the PoC during Phase 4.7.)*
+3. **PoC 2b two extra questions (plan0 A.2) — ✅ RESOLVED.** Both answered while proving the JARVIS validation path; recorded in `poc_results.md`:
+   - **(a) DAI webhook notifications** — the **webhooks admin UI is available on JARVIS and Jay is admin**, so webhooks are enable-able. The profile is **not yet registered**, so `poll_backoff` is the day-one completion mode and webhook is the upgrade path (**O1**).
+   - **(b) Run→commit visibility — yes.** The run log records **`Using Git commit SHA: '<sha>'`**, and the test config's git connection **syncs at run start** (not a cached clone). This makes **UP-24 fully implementable rather than a residual risk**, and is why §4.7.2's fallback-WARN branch has been removed.
+
+   *(The original "cost of skipping: repeating the PoC during Phase 4.7" note is retained as historical rationale — it is why these questions were asked up front.)*
 4. **Live-use guard:** until Phase 4.4 delivers gated mode, run any non-eval usage with `jira_writes_enabled: false` (plan1 already supports the boolean; the eval harness already forces false). *(Cost of skipping: unapproved bot comments on real tickets — the exact week-one failure this plan exists to prevent.)*
 5. *(Optional, zero cost)* When implementing plan1 §1.1.2, keep the pipeline's step sequence as a data-driven list rather than hard-coded calls, so Phase 4.1 inserts `triage` without surgery.
 
@@ -49,7 +53,7 @@
 
 ---
 
-## Phase 4.1 — Triage gate + routed outcomes [UP-16, UP-17] — *Owner: Claude Code*
+## Phase 4.1 — Triage gate + routed outcomes [UP-16, UP-17] — *Owner: Agent*
 
 ### Step 4.1.1 — `src/analysis/triage.py`
 `TriageGate.classify(ticket_text, log_entries, matched_error_entry, screenshot_path?) -> TriageResult {route: autofix|diagnose_only|ask_human, family, confidence: HIGH|MEDIUM|LOW, signals[], evidence[], reasoning}`.
@@ -92,7 +96,7 @@ Extend plan1 §1.7's `scoring.py`: a diagnose-only run scores `correct` when the
 
 ---
 
-## Phase 4.2 — Verdict engine: signature pass, flake policy, baseline [UP-19] — *Owner: Claude Code ((User): live checks)*
+## Phase 4.2 — Verdict engine: signature pass, flake policy, baseline [UP-19] — *Owner: Agent ((User): live checks)*
 
 ### Step 4.2.1 — `src/orchestrator/verdict.py`
 - `FailureSignature {script, failing_handler, step_ref, message_type, target (normalized lookup text/image), error_type}` — extracted at `fetch_logs` from the matched error entry; stored on the run. Plus `extract_signatures(log_entries) -> [FailureSignature]` for full-run failure sets.
@@ -110,7 +114,7 @@ validation:
 ```
 
 ### Step 4.2.2 — Baseline / reproduce run
-Where policy requires it, run the **unpatched** test once via the active `INNER_LOOP` mechanism before attempt 1. Outcomes: (a) original signature reproduces → store `baseline_sigs`, proceed; (b) does NOT reproduce → **downgrade** the route to `diagnosis_only:{env|test_data}` with evidence "not reproducible on the validation environment" — a finding, not a failure (the 8450 BST lesson cuts both ways: env differences invalidate naive validation in either direction); (c) baseline itself flaky → record, apply allowlist. Cache the baseline per (ticket, base SHA) so retries never repeat it. Cost honesty in code comments: one extra SUT cycle where required, purchased against up to three wasted attempts and a wrong PR.
+Where policy requires it, run the **unpatched** test once via the **JARVIS validation gate** before attempt 1. Outcomes: (a) original signature reproduces → store `baseline_sigs`, proceed; (b) does NOT reproduce → **downgrade** the route to `diagnosis_only:{env|test_data}` with evidence "not reproducible on the validation environment" — a finding, not a failure (the 8450 BST lesson cuts both ways: env differences invalidate naive validation in either direction); (c) baseline itself flaky → record, apply allowlist. Cache the baseline per (ticket, base SHA) so retries never repeat it. Cost honesty in code comments: one extra SUT cycle where required, purchased against up to three wasted attempts and a wrong PR.
 
 ### Step 4.2.3 — Flake re-run budget
 A FLAKE_SUSPECT triggers ≤`flake_rerun_max` re-runs of the *same candidate* without consuming an attempt; a second FLAKE_SUSPECT counts as FAIL with a flake note. `callers_pass` smoke runs also apply the allowlist.
@@ -123,7 +127,7 @@ In the controller built by plan2 §2.6: replace `if res.PASS` with `if verdict(.
 
 ---
 
-## Phase 4.3 — `ask_human` channel [UP-18] — *Owner: Claude Code*
+## Phase 4.3 — `ask_human` channel [UP-18] — *Owner: Agent*
 
 ### Step 4.3.1 — Tool + persistence + resume
 Register `ask_human(question, why_needed, what_was_tried, options?: [str])` — non-terminal; capped by config `human_input: {max_questions_per_run: 2}`. Mechanics: publish `human_input.requested` (question/why/tried/options/expires); persist to the approvals table with a new `kind` column (`approval|question|jira_post`, default `approval` — a migration, not a new table); pipeline awaits the same asyncio.Event machinery as plan2's approval gate; timeout → park resumable.
@@ -141,7 +145,7 @@ Scripted end-to-end replay: triage → `change_scope` → ask_human ("what repla
 
 ---
 
-## Phase 4.4 — Graduated Jira autonomy [UP-23] — *Owner: Claude Code ((User): policy owner)*
+## Phase 4.4 — Graduated Jira autonomy [UP-23] — *Owner: Agent ((User): policy owner)*
 
 ### Step 4.4.1 — Config replaces the boolean
 ```yaml
@@ -162,7 +166,7 @@ Track per posted comment: approved-as-drafted / edited / rejected, and a weekly-
 
 ---
 
-## Phase 4.5 — Reasoning hardening [UP-20, UP-21 + evidence completeness + scope/intent] — *Owner: Claude Code*
+## Phase 4.5 — Reasoning hardening [UP-20, UP-21 + evidence completeness + scope/intent] — *Owner: Agent*
 
 ### Step 4.5.1 — Attempt ledger [UP-20]
 Append `{attempt, hypothesis, change_summary (file + one-liner), failure_signature, failing_step, elapsed_at_failure_s}` after every attempt; inject the full ledger into every re-diagnosis and fix call with the instruction: *"If multiple attempts failed at the same step/elapsed point under different changes, the ROOT CAUSE IS THE INVARIANT across them, not the value you keep changing — switch failure family or propose a MECHANISM change."*
@@ -183,7 +187,7 @@ Anchor every (re-)diagnosis to the ORIGINAL ticket's `failure_signature`. New un
 
 ---
 
-## Phase 4.6 — Knowledge & repo intelligence [UP-25 + lint + context seeds] — *Owner: Claude Code + (User for curation)*
+## Phase 4.6 — Knowledge & repo intelligence [UP-25 + lint + context seeds] — *Owner: Agent + (User for curation)*
 
 ### Step 4.6.1 — Git history tools
 Add read-only tools `git_blame(path, start, end)`, `git_file_log(path, n=10)` (message + files + date), `diff_since_green(green_ref?)` — budget ≤3 calls/run, suggested in the prompt when triage/diagnosis suspects a regression ("was passing recently", a last-green runid exists). `diff_since_green` returns "unavailable" gracefully when no runid→commit mapping exists.
@@ -210,19 +214,25 @@ Any human-supplied fact during ANY run (an ask_human answer, a chat correction o
 
 ---
 
-## Phase 4.7 — Clustering & integrity [UP-22, UP-24] — *Owner: Claude Code ((User): confirms DAI answers)*
+## Phase 4.7 — Clustering & integrity [UP-22, UP-24] — *Owner: Agent ((User): confirms DAI answers)*
 
 ### Step 4.7.1 — Failure clustering / dedup
 After `fetch_logs`, compute two hashes: **strict** = (failing script, failing handler, message_type, normalized lookup target) and **loose** = (handler, target). Check, in order: (a) active runs — strict match → attach this ticket to the running run (DB link, chat message "TESTAUTOMA-X shares this failure with running TESTAUTOMA-Y; attaching"), do not spawn duplicate work; (b) recent trajectories — strict match on a solved run → surface it first as a chat question ("same signature fixed in PR #N — verify & reuse?"); (c) open tickets via best-effort JQL (component, status != Done, handler/target text) — loose matches → flag "possible cluster (N tickets)" in chat and in the diagnosis draft. Batch handling always requires human confirmation; no auto-batch-patching. Rationale in code comments: one app UI change breaking thirty scripts identically is simultaneously the highest-value event (one diagnosis, one fix, N tickets closed) and the scenario where a naive agent burns N budgets and posts N comments.
 
-### Step 4.7.2 — Practice-run integrity check
-In `PracticeGate.validate` (plan2 §2.5 code): record the pushed SHA; immediately before `trigger()`, assert `git ls-remote practice refs/heads/practice` == pushed SHA. If PoC 2b (Phase 4.0 item 3) found run→commit visibility: after completion, assert the run's recorded commit == pushed SHA; else log one WARN per run naming the residual risk and rely on the ls-remote assert + the confirmed sync-at-run-start setting. A deliberate mismatch aborts the gate with `{status: STALE_SYNC}` instead of returning a verdict — no PASS/FAIL is ever trusted from a run whose executed commit cannot be tied to the pushed candidate.
+### Step 4.7.2 — JARVIS-run integrity check
+In `ValidationGate.validate` (plan2 §2.5.2 code): record the pushed SHA; immediately before `trigger()`, assert `git ls-remote agentic-eggplant-automation refs/heads/Enovia` == pushed SHA; after completion, assert the run log's `Using Git commit SHA: '<sha>'` == pushed SHA.
 
-**DoD (Phase 4.7):** two synthetic tickets with one signature → second attaches, one fix branch would serve both, both Jira drafts reference the one PR; STALE_SYNC test green; UP-24 assert active on every Practice cycle.
+**Both asserts are mandatory.** The earlier conditional hedging is obsolete: PoC 2b (Phase 4.0 item 3) **confirmed** that the run log records the executed commit and that the git connection syncs at run start, so there is no fallback-WARN branch and no residual-risk path — a run that cannot produce its executed SHA is an integrity failure, not a warning.
+
+A mismatch at **either** edge aborts the gate with `{status: STALE_SYNC}` instead of returning a verdict — **no PASS/FAIL is ever trusted from a run whose executed commit cannot be tied to the pushed candidate.**
+
+> **Division of labour with plan2:** plan2 §2.5.2 now *implements* both asserts as part of the gate's normal path. This step's job is **enforcement and testing** — proving the asserts cannot be bypassed, that `STALE_SYNC` never degrades into a verdict, and that the retry controller treats it per plan2 §2.6 (no attempt consumed, retry once, then abort preserving artifacts) — rather than introducing the design.
+
+**DoD (Phase 4.7):** two synthetic tickets with one signature → second attaches, one fix branch would serve both, both Jira drafts reference the one PR; STALE_SYNC test green; **both UP-24 asserts active on every JARVIS validation cycle**.
 
 ---
 
-## Phase 4.8 — Metrics, rollout alignment & GATE 4 — *Owner: Claude Code ((User): the contract meeting)*
+## Phase 4.8 — Metrics, rollout alignment & GATE 4 — *Owner: Agent ((User): the contract meeting)*
 
 ### Step 4.8.1 — Metrics additions
 Extend the metrics surface (plan3 §3.6's endpoint if already built; otherwise register these for it): routing precision (router decisions later confirmed correct); comment precision (approved-as-drafted / edited / rejected / verdict-correct); flake-saves (candidates rescued by the verdict engine); context.md growth (accepted suggestions over time); and the **automatable-share trend** — the share of incoming tickets whose route was autofix-eligible, the number that should visibly rise as context.md accumulates. That trend is the stakeholder chart.
@@ -246,7 +256,7 @@ Run `scripts/run_eval.py --label plan4_on` against the same ticket set as the pr
 | Assertion-weakening edits flagged | 100% | ☐ |
 | Ungated Jira posts in gated mode | **0** | ☐ |
 | Every attempt judged by verdict engine (no raw exit codes) | yes | ☐ |
-| Practice-run SHA assert active on every cycle | yes | ☐ |
+| JARVIS-run SHA assert (both edges) active on every cycle | yes | ☐ |
 | Clustering demonstrated on a seeded duplicate pair | yes | ☐ |
 | context.md seeded (6 sections) + capture loop live | yes | ☐ |
 | Eval re-run: goldens green, no accuracy regression | yes | ☐ |
@@ -263,6 +273,6 @@ Everything above still applies cleanly; the differences are: the rollout happene
 No vector DB now (revisit only inside UP-11 retrieval once ≥10 real trajectories exist and the lexical scorer measurably misses). No fine-tuning. No tree-sitter SenseTalk grammar (no public grammar exists; English-like syntax is brutal to grammar-ize; regex + vocabulary + the 4.6.3 targeted rule is the correct 80/20 at this repo size). No external tracing stack (the events table + persisted transcripts already are the trace). No @mention/comment-webhook summoning build (manual convention in the rollout contract only). Multi-track expansion unchanged (later playbook).
 
 ## EFFORT HONESTY
-Roughly 5–8 build days of Claude Code work, concentrated in Phases 4.1–4.5, plus (User) time for the router-eval review, the DAI confirmations, and the contract meeting. Nothing in plan 4 may be allowed to delay or degrade the already-working read-only diagnosis product — it remains the protected, independently shippable milestone.
+Roughly 5–8 build days of Agent work, concentrated in Phases 4.1–4.5, plus (User) time for the router-eval review, the DAI confirmations, and the contract meeting. Nothing in plan 4 may be allowed to delay or degrade the already-working read-only diagnosis product — it remains the protected, independently shippable milestone.
 
-➡ **Claude Code: execute plans 0–2 exactly as written (with the Phase 4.0 carry-alongs), pass GATE 2, then open this file at Phase 4.1. Plans 0–3 are never edited.**
+➡ **Agent: execute plans 0–2 exactly as written (with the Phase 4.0 carry-alongs), pass GATE 2, then open this file at Phase 4.1. Plans 0–3 are never edited.**
