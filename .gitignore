@@ -1,28 +1,32 @@
 # ============================================================================
-# JARVIS — repository-root ignore rules
-# Belt-and-braces over ai-test-fix-agent/.gitignore: secrets and virtualenvs
-# must never enter history, at any depth.
+# JARVIS — repository root == project root
+# Secrets and virtualenvs must never enter history, at any depth.
 # ============================================================================
 
-# Secrets — never commit, at any depth
+# Secrets — never commit
+.env
 **/.env
 **/.env.local
 *.pem
 *.key
 
 # Python
+.venv/
 **/.venv/
+__pycache__/
 **/__pycache__/
 *.pyc
 *.pyo
 
-# Data / artifacts
+# Data / artifacts (gitignored per plan_master §4)
+data/
 **/data/
 *.log
 
-# Node / webapp (later phases)
+# Node / webapp (later phases, created by plan0 B.1)
+node_modules/
 **/node_modules/
-**/webapp/dist/
+webapp/dist/
 
 # OS noise
 Thumbs.db
