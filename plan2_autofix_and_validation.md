@@ -73,17 +73,23 @@ Exit **127 → `{"status":"NO_LICENSE"}`**; else PASS/FAIL by exit code; `_parse
 ### Step 2.5.0 — Dispatcher generator — *Owner: Agent*
 `src/orchestrator/dispatcher.py` + `src/analysis/templates/agent_dispatcher.st.j2` (template contract: plan_master §2.3.3).
 
+**The registry is the input.** `tracks/enovia/test_config_registry.yaml` (**D3**) is **read at runtime**, never compiled in. Adding a suite is a **data** change, never a code change.
+
 Functions:
-- `suite_of(file_path) -> suite` — derive the suite from an affected file's repo path.
+- `load_registry() -> {suite_key: entry}` — read the D3 registry at runtime.
+- `suite_of(file_path) -> suite_key` — resolve a **changed file** to a registry suite key. **An unresolved key is an error, never a fallback** — it must never silently pick a default or a nearest match. The gate's pre-flight check (§2.5.2) turns that error into a refusal to validate.
 - `target_ref(script_path) -> "TestCases/<name>"` — implements **S1**: strip the `Scripts/` prefix, strip the `.script` extension. EPF does not auto-search subfolders, so any other form silently fails to resolve.
 - `render(suite, target) -> str` — render the template. Emits plain `run targetScript` per **S2** (dot-notation `targetScript.run()` does not work).
-- `write_and_commit(working_copy, suite, target) -> sha` — write the generated dispatcher into the suite and commit it onto `wc/<TICKET>`.
+- `render_all(registry, target_suite, target) -> {suite: text}` — render a dispatcher for **every** registered suite (see the regeneration rule below): the target suite gets the ticket's target, every other suite gets its own `smoke_target`.
+- `write_and_commit(working_copy, rendered) -> sha` — write **all** generated dispatchers into their suites and commit them onto `wc/<TICKET>`.
 
-**Unit tests (all mandatory):** the template renders exactly the §2.3.3 contract; a `Scripts/TestCases/Foo.script` path yields `TestCases/Foo`; **`.script` and `Scripts/` are never emitted**; **no `try/catch` appears in the output** — its absence is load-bearing, since a swallowed target failure would produce a false PASS, the worst possible failure mode for this system.
+**Regeneration rule (settled — F8/O6, a rule, not a recommendation).** Every registered suite has its **own** `<Suite>_AgentDispatcher.script` **and its own test config**, which executes that suite's dispatcher. On **every** validation push, JARVIS regenerates the dispatcher for **every suite in the registry**, so the `Enovia` branch is **always complete**. This is what makes the force-push safe: the push replaces branch contents wholesale, so any dispatcher not regenerated would simply vanish (**O5**). Consequence: **a registered suite with no `smoke_target` is a hard error at onboarding time**, never a silent failure at validation time — the non-target suites still need a valid target line.
+
+**Unit tests (all mandatory):** the template renders exactly the §2.3.3 contract; a `Scripts/TestCases/Foo.script` path yields `TestCases/Foo`; **`.script` and `Scripts/` are never emitted**; **no `try/catch` appears in the output** — its absence is load-bearing, since a swallowed target failure would produce a false PASS, the worst possible failure mode for this system; **`render_all` emits one dispatcher per registered suite**; a registry entry missing `smoke_target` **raises at load time**; `suite_of` on an unregistered path **raises rather than defaulting**.
+
+**Assertion rule:** anything that keys off the dispatcher's log output must match the **`AgentDispatcher:` prefix only**, never the full line — the em dash in `— target=` is non-ASCII, and log encoding must not be able to break a verdict.
 
 **D4 (binding):** the generated `<Suite>_AgentDispatcher.script` is a validation artifact. It **never exists in the production repo** and must **never** appear in a `Jarvis-fix/<TICKET>` branch or PR — the publisher asserts this before pushing (plan3 §3.2).
-
-> ⚠ **CONFIRM (Jay):** **O6 — multi-suite dispatcher regeneration policy.** Force-pushing the full candidate state onto `Enovia` replaces the branch contents, so dispatchers for suites *other than* the target suite disappear unless regenerated (**O5**). **Recommended invariant: regenerate dispatchers for every registered suite on every push, so the branch is always complete.** Recorded as a **recommendation, not settled fact** — placeholder pending your ruling.
 
 ### Step 2.5.1 — Confirm JARVIS wiring — *(User)*
 Confirm in `config/enovia.yaml → jarvis`: repo URL + PAT (**force-push rights to `Enovia`**), `branch: Enovia`, **JARVIS DAI** base URL + **v2 client credentials** (`POST /api/v2/auth` — *not* the production DAI's Keycloak OAuth2 scheme), that the **test-config registry resolves for the target suite** (`tracks/enovia/test_config_registry.yaml`, D3), the trigger endpoint, and `completion_mode: webhook | eggplant_runner | poll_backoff` (= `JARVIS_COMPLETION_MODE`, **`poll_backoff` day one**) plus its mode-specific settings (webhook secret + route, or runner binary path, or poll backoff schedule + timeout).
@@ -104,8 +110,9 @@ All three completion modes are kept; **`poll_backoff` is the day-one mode and we
 - **`poll_backoff`:** `wait_complete(timeout=<config, must cover observed 20min–2hr range>, backoff=[15,30,60,120])` — an `asyncio.sleep`-based loop, HTTP-only, no LLM calls.
 
 `ValidationGate.validate(ticket_key, wc_branch, affected_files) -> {status, result_id, log, screenshots, result_url, executed_sha}`: **under the track lock**, in this order →
+0. **Pre-flight — suite onboarded?** `suite_of(affected_files)`; if the resolved suite is **not present in the D3 registry**, return **`{status: NOT_ONBOARDED}` immediately — before any push, before any trigger.** The gate **never** falls back to another suite's `test_config_id`, and `NOT_ONBOARDED` is **never** reported as PASS or FAIL. The run is routed to the existing **diagnose-only** outcome with reason `suite_not_onboarded`, using the existing `ai-diagnosis-only` label. This is a routing decision taken before a run starts, not a run-time failure — so it adds no plan3 §3.4.2 degradation rule. Only one suite is onboarded today (**O4**), so this path is live from day one (plan_master §6.13);
 1. derive the suite from `affected_files`; look up its `test_config_id` in the D3 registry;
-2. render and commit `<Suite>_AgentDispatcher.script` for the target (2.5.0);
+2. render and commit a dispatcher for **every registered suite** (2.5.0 regeneration rule) — target suite gets the ticket's target, the rest get their `smoke_target`;
 3. `git push agentic-eggplant-automation wc/<TICKET>:refs/heads/Enovia --force` (force is safe — the branch is disposable and the lock serialises writers); record the pushed SHA;
 4. **UP-24 pre-check (mandatory):** assert `git ls-remote agentic-eggplant-automation refs/heads/Enovia` **==** the pushed SHA;
 5. `trigger(test_config_id)`; publish `agent.message` ("JARVIS validation run started…") + periodic `step.progress` heartbeats (templated strings, **not** LLM-generated) while waiting — with `webhook` there is no polling to hang a heartbeat off of, so heartbeats there are just an elapsed-time timer;
@@ -115,7 +122,7 @@ All three completion modes are kept; **`poll_backoff` is the day-one mode and we
 
 **Both asserts are mandatory.** A pre-trigger mismatch or a post-completion SHA mismatch returns **`{status: STALE_SYNC}`** and **never** a PASS/FAIL verdict — no verdict is trusted from a run whose executed commit cannot be tied to the pushed candidate. This is plan4 §4.7.2 landing early; see that section for the enforcement and test design rather than duplicating it here.
 
-**Verification ((User)):** a known-good candidate → **PASSED** with evidence retrieved; a deliberately broken candidate → **FAILED** with the failure log captured; a **seeded SHA mismatch → `STALE_SYNC`** (and no verdict); confirm no LLM call occurs between trigger and resolution — **the cost log must show $0 spent between trigger and resolution**.
+**Verification ((User)):** a known-good candidate → **PASSED** with evidence retrieved; a deliberately broken candidate → **FAILED** with the failure log captured; a **seeded SHA mismatch → `STALE_SYNC`** (and no verdict); **a candidate touching a suite absent from the registry → `NOT_ONBOARDED`, with nothing pushed and nothing triggered**; confirm no LLM call occurs between trigger and resolution — **the cost log must show $0 spent between trigger and resolution**.
 **DoD:** the gate returns a verdict for a candidate branch purely via the JARVIS infrastructure; lock respected; both UP-24 asserts active on every cycle; evidence retrieval works on both outcomes; the wait mechanism matches `JARVIS_COMPLETION_MODE` and burns no tokens.
 
 ---
@@ -141,6 +148,10 @@ for attempt in 1..max_attempts:
       if lint fails: last_failure=lint issues; continue               # Tier 0, no SUT
       async with track_lock:                                          # SUT serialization
           res = validation_gate.validate(ticket, wc_branch, affected_files)   # the JARVIS gate, §2.5
+          if res.NOT_ONBOARDED:                                       # pre-flight, nothing pushed
+              # does NOT consume an attempt; NOT retried — end the run as diagnose-only
+              return {"status":"diagnosis_only","reason":"suite_not_onboarded",
+                      "artifacts":preserved}
           if res.STALE_SYNC:                                          # UP-24: never a verdict
               # does NOT consume an attempt; retry once, then abort preserving artifacts
               if not stale_retry_used: stale_retry_used=True; retry same candidate
@@ -153,6 +164,7 @@ for attempt in 1..max_attempts:
 return {"status":"exhausted","attempts":max_attempts,"last_logs":last_failure}
 ```
 - `callers_pass(fix, run)`: from blast radius pick the configured smoke set of caller tests (per `enovia.yaml → blast_radius_smoke`), run via the **same JARVIS gate**; all must pass.
+- **`NOT_ONBOARDED` handling:** the changed file belongs to a suite that has never been onboarded (plan0 B.4b), so there is no `test_config_id` to trigger and **nothing was pushed**. This says nothing about the candidate's quality, so it **does not consume an attempt** and is **not retried** — retrying cannot change the registry. The run **ends as diagnose-only** with reason `suite_not_onboarded`, artifacts preserved, using the existing `ai-diagnosis-only` label. Never a PASS, never a FAIL.
 - **`STALE_SYNC` handling:** a SHA mismatch at either UP-24 edge is an **integrity failure, not a fix failure** — it says nothing about the candidate's quality. It therefore **does not consume an attempt**; retry once, and if it recurs, **abort the run preserving all artifacts** (branch, diagnosis, evidence, transcript) and surface it via the plan3 §3.4.2 degradation path. Never convert it into a PASS or a FAIL.
 - `BudgetGuard` charged on every model call and (optionally, fixed estimate) per SUT run; `BudgetExceeded` → graceful `{"status":"budget_exceeded"}` preserving artifacts.
 - Every decision point publishes `agent.message` + step events so the chat narrates the loop ("Attempt 2: re-diagnosing with extended thinking…").
