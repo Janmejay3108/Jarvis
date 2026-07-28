@@ -196,7 +196,7 @@ On `status=pass`, pipeline enters `awaiting_approval`: persist an `approvals` ro
 | Final pass (≤3 attempts) | **≥80%** | ☐ (+CI, + attempt histogram) |
 | Functional equivalence to dev fix | **≥75%** | ☐ |
 | Regressions (caller-suite breakage) | **0** | ☐ hard zero |
-| Avg fix+validation time | **< 30 min per attempt (JARVIS gate)** · ⚠ CONFIRM — real per-cycle timing not yet measured (O3) | ☐ |
+| Avg fix+validation time | **< 30 min per attempt (JARVIS gate)** · ⚠ **CONFIRM (Jay):** real per-cycle wall-clock timing is not yet measured (**O3**) — obtainable only once the gate runs for real | ☐ |
 | Cost per ticket | reported honestly ($2–6 expected, Opus 4.6 + caching) | ☐ |
 
 **DoD:** Gate 2 met with CIs; any regression → pause, root-cause, fix. **Plan 3 cannot begin until Gate 2 passes.**

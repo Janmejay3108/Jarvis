@@ -91,7 +91,7 @@ docs without renaming them in the real system would create a false record):
 | `TESTAUTOMA-8422` and all Jira keys | Real identifiers. |
 | `aiagent-testmanager.cos.is.keysight.com` | Real hostname. |
 | Jira labels `ai-fixed`, `ai-diagnosed`, `ai-diagnosis-only`, `ai-needs-manual`, `ai-budget-stop`, `ai-flake`, `ai-diagnosis-env`, `ai-diagnosis-data`, `ai-diagnosis-infra`, `ai-diagnosis-appbug`, `ai-diagnosis-changescope`, `ai-needs-manual-validation` | Operational identifiers agreed (or to be agreed) with the track team. |
-| `ai-test-fix-agent` as a repo slug / directory name | A real Bitbucket repo slug. |
+| ~~the project's former slug~~ | **No longer protected — retired.** The Bitbucket repo is now **`jarvis`** (it exists and is empty), and the repo root *is* the project root. `agentic-eggplant-automation` is a **different** repo (the validation repo) and is **not** renamed. |
 
 **Renamed because it is output text, not an identifier:** the PR commit prefix
 `[AI Agent] Fix <TICKET>:` → `[JARVIS] Fix <TICKET>:`, and the PR footer
@@ -217,14 +217,24 @@ into the chat as a diff artifact), and `git reset --hard` restores a pristine tr
 
 | Tag | Machine | Address | Spec | Role |
 |---|---|---|---|---|
-| **[ORCH]** | Orchestrator VM | `aiagent-testmanager.cos.is.keysight.com` (156.140.21.109) | 4 CPU / 32 GB | Where JARVIS runs. Holds the working copy. |
-| **[RUNNER]** | EPF runner VM | `eggptdai10.cos.is.keysight.com` (156.140.21.30) | 4 CPU / 16 GB | Eggplant Functional + `runscript.bat` + floating license + RDP SUT. **Relevant only to the deferred local inner loop.** |
-| **[JARVIS VM]** | JARVIS DAI + agents | ⚠ CONFIRM — observed as `eggptdai10.cos.is.keysight.com:8000` | — | DAI 26.2.2, Design + Run agents, `C:\Eggplant_Suites`. Jay-administered. |
+| **[JARVIS VM]** — one machine, every role | `eggptdai10.cos.is.keysight.com` (156.140.21.30) | 4 CPU / 16 GB | **JARVIS DAI 26.2.2** at `https://eggptdai10.cos.is.keysight.com:8000/` · co-located **Design + Run agents** · **EPF 26.2.x** · **`C:\Eggplant_Suites`** · the **Enovia working copy** · and the **JARVIS orchestrator + chat app at `:8080`**. Jay-administered. |
+| **[ORCH]** — superseded | `aiagent-testmanager.cos.is.keysight.com` (156.140.21.109) | 4 CPU / 32 GB | Previously designated orchestrator host. **Superseded by the `eggptdai10` co-location decision; retained** — the hostname belongs to a real, separate org-level initiative and is protected under R1. |
 
-> ⚠ **CONFIRM (Jay):** the [RUNNER] row and the [JARVIS VM] row both name `eggptdai10`. Are these the
-> same machine? Is the [RUNNER] row obsolete now that the local inner loop is deferred? What is the
-> exact JARVIS DAI base URL, scheme and port? And which host actually serves the chat web app —
-> plan_master §1 says `eggptdai10…:8080`, plan1 §1.6.3 says `aiagent-testmanager…:8000`.
+**One VM, two ports.** `:8000` = JARVIS DAI (HTTPS) · `:8080` = the JARVIS orchestrator + chat app —
+the target port, **to be confirmed free at deploy time**.
+
+**Why co-locate?** The DAI, the Design and Run agents, EPF, `C:\Eggplant_Suites` and the Enovia working
+copy all live on this VM. Putting the orchestrator there too shortens every hop that matters. Jay holds
+all required permissions; VM specs are not a constraint.
+
+**The former "EPF runner" role** — Eggplant Functional + `runscript.bat` driving the SUT locally — is
+**deferred along with the local inner loop**. The *role* is deferred; the *machine* is not obsolete, it
+now carries every other role instead. **SUTs stay on their own VMs**, connected at execution time.
+
+**Where development happens: on Jay's local machine.** VM deployment comes later. The inherently
+VM-bound steps (plan0 B.2 provisioning, B.4's clone + scheduled tasks, B.4b's DAI authoring, B.7's
+integration smoke) stay `(User)`-on-VM, and **B.7 is the first time the full integration set runs on the
+target host**.
 
 ### Agents and licensing
 
@@ -252,7 +262,7 @@ locking model and license reservation both assume single-SUT serialisation.
 M&AFoundational, MACS, MaterialsComplianceCentral, MSFIntegration, PartMaster, Performance,
 PLMBridge, Search, SupplierCentral, TeamCenter.
 
-**Only `Part_Master_Pack_01` / PartMaster is onboarded to JARVIS** (open item **O4**).
+**Only `Part_Master_Pack_01` / PartMaster is onboarded to JARVIS. The remaining 16 suites each need the full D2 onboarding sequence** (plan0 B.4b) — open item **O4**, the single biggest scaling item on the project.
 
 ### Other confirmed facts
 
@@ -278,8 +288,11 @@ This is the part that was proven on real infrastructure and then written back in
   **cannot be rewritten per ticket via API.** *This single constraint forced the entire dispatcher
   pattern.*
 - **C2.** Suite names must be **globally unique across a DAI instance.**
-- **C3.** ⚠ **CONFIRM (Jay):** referenced by open item O2 and by the "C1–C4" range, but its exact
-  statement was never supplied. Either provide it, or confirm that O2's collision behaviour *is* C3.
+- **C3.** A DAI **git connection binds one repository to exactly one branch**; the same repository
+  **cannot be connected on two branches within one DAI instance.** *This is why validation force-pushes a
+  single permanent branch (`Enovia`) rather than a branch per ticket* — per-ticket branches would need
+  per-ticket git connections, which the instance cannot hold. With **C1**, this is the reason the design
+  is "static config + dispatcher + one disposable branch".
 - **C4.** Model exports restore internal structure but **not** suite links or test configs — those are
   **re-authored after import.** This is why the monthly re-import (§16, `docs/maintenance.md`) is more
   than a button press.
@@ -316,20 +329,31 @@ before pushing; a dispatcher reaching production is a **defect**.
 
 ### 5.3 The dispatcher artifact
 
-Template: `src/analysis/templates/agent_dispatcher.st.j2`
+Template: `src/analysis/templates/agent_dispatcher.st.j2`. This is the **proven** form — the script whose
+log lines exist in a real JARVIS run log — and it is authoritative over any earlier draft:
 
 ```
 -- {{suite}}_AgentDispatcher.script
 -- JARVIS — dispatcher for {{suite}}.suite (GENERATED — do not hand-edit)
--- Contract: only the targetScript line is rewritten per validation cycle.
+-- Contract: only the targetScript line below is rewritten per validation cycle.
+-- Value = path relative to Scripts/, forward slashes, no .script extension.
 -- No try/catch — a target failure MUST fail this run.
-
-set targetScript to "{{target_rel_path}}"   -- e.g. TestCases/TESTAUTOMA_6167_Verify...
-
-log "start — target=" & targetScript
+set targetScript to "{{target_rel_path}}"
+log "AgentDispatcher: start — target=" & targetScript
 run targetScript
-log "done — target=" & targetScript
+log "AgentDispatcher: done — target=" & targetScript
 ```
+
+**The `AgentDispatcher:` prefix is load-bearing.** A.2b's verification and the gate's log parsing both key
+off these markers. **Assert on the prefix only, never on the full line** — the em dash is non-ASCII, and
+log encoding must not be able to break a verdict. The `Value = path relative to Scripts/…` comment states
+rule **S1** at the point of use, where an implementer will actually read it.
+
+**Regeneration rule (F8 / decision O6 — a rule, not a recommendation).** Every registered suite has its
+**own** dispatcher **and its own test config** executing that dispatcher. On **every** validation push,
+JARVIS regenerates the dispatcher for **every suite in the D3 registry**, so the `Enovia` branch is always
+complete — the force-push replaces branch contents wholesale, so anything not regenerated vanishes.
+Consequence: **a registered suite with no `smoke_target` is a hard error at onboarding time.**
 
 **The absence of `try/catch` is deliberate and load-bearing.** A swallowed target failure would
 produce a **false PASS** — the worst possible failure mode for this system, because it would push a
@@ -957,25 +981,27 @@ rule: code-reasoning families ≥60% → proceed · 40–60% → proceed, vision
 | **O1** | Webhook profile not yet registered on JARVIS. `poll_backoff` is the day-one mode. |
 | **O2** | Suite-name collision behaviour as suites accumulate (C2). Re-check at every onboarding. |
 | **O3** | Per-cycle validation wall-clock timing across a realistic suite set — **not yet measured**. Needed for the Gate 2 timing row. |
-| **O4** | Scale-out: only PartMaster is onboarded. Every other suite needs the full D2 sequence. |
-| **O5** | Force-push replaces branch contents, so dispatchers for non-target suites disappear unless regenerated. |
-| **O6** | The **policy decision** arising from O5. Recommended: regenerate dispatchers for every registered suite on every push. **Not settled.** |
+| **O4** | Scale-out: only PartMaster is onboarded; **16 suites remain**, each needing the full D2 sequence. **Now the single biggest scaling item.** |
+| **O5** | ⚠️ **MITIGATED** by the O6 decision (not closed — the mechanic stands). Force-push replaces branch contents, so dispatchers for non-target suites disappear unless regenerated. |
+| **O6** | ✅ **RESOLVED 2026-07-28.** Every registered suite has its own dispatcher and its own test config; every push regenerates the dispatcher for **every** registered suite. A **rule**, not a recommendation. |
 | **O7** | Monthly model re-import is an **undocumented manual activity**; must become a written procedure. **Person-dependency.** |
 
-### Everything awaiting a factual answer from Jay
+### Everything still awaiting a factual answer
 
-These are placeholders, **not facts**. The consolidated list with file/section references lives in
-`docs/plan_change_log_jarvis.md` Part 1.
+**Only two remain.** Both are unanswerable by discussion — each needs something to actually run. The
+consolidated list lives in `docs/plan_change_log_jarvis_2.md` Part 1.
 
-- Exact JARVIS DAI base URL, scheme and port; the `eggptdai10` two-row conflict; which host serves the chat app
-- The `PartMaster` `TEST_CONFIG_ID` value (and each subsequent suite's)
-- Validation-repo PAT scope requirements for force-pushing `refs/heads/Enovia`
-- Whether the `Jarvis-fix/` branch prefix and the `ai-*` Jira label set should really be renamed
-- Whether the `ai-test-fix-agent` repo slug is being renamed in Bitbucket
-- The O6 multi-suite dispatcher regeneration policy
-- Real per-cycle validation wall-clock timing (O3)
-- The exact statement of constraint C3
-- The model re-import runbook specifics (menu path, replace-vs-duplicate, `TEST_CONFIG_ID` stability)
+1. **Real per-cycle validation wall-clock timing (O3)** — measurable only once the gate runs for real
+   across a realistic suite set. It feeds the plan2 Gate 2 "avg fix+validation time" row.
+2. **Model re-import runbook specifics** (`docs/maintenance.md`) — the export/import menu path; whether
+   a re-import *replaces* or *duplicates* an existing model; whether `TEST_CONFIG_ID` survives a
+   re-import. Answerable only by walking through one re-import.
+
+**Answered on 2026-07-28 and no longer open:** the JARVIS DAI base URL (`https://eggptdai10.cos.is.keysight.com:8000/`);
+the `eggptdai10` two-row conflict (one machine, all roles); which host serves the chat app
+(`eggptdai10:8080`); the PartMaster `TEST_CONFIG_ID`; the validation-repo PAT (Jay holds admin, force-push
+works); the branch prefix (`Jarvis-fix/`) and the `ai-*` labels (unchanged); the repo slug (`jarvis`); the
+O6 regeneration policy (regenerate every registered suite, every push); and constraint C3.
 
 ### Deliberately out of scope — do not reintroduce
 
@@ -1000,7 +1026,9 @@ Microsoft Graph SDK.
 | `docs/context.md` | **This file** — full project explanation |
 | `docs/later-enhancements.md` | Deferred work (local runscript loop, webhook upgrade, more SUTs, scale-out) |
 | `docs/maintenance.md` | Operational procedures, incl. the monthly re-import (O7) |
-| `docs/plan_change_log_jarvis.md` | Every edit made during the JARVIS alignment + the consolidated CONFIRM list |
+| `docs/plan_change_log_jarvis.md` | Pass 1: every edit made during the JARVIS alignment + that pass's marker list |
+| `docs/plan_change_log_jarvis_2.md` | Pass 2: the repo flatten, the slug rename, marker closures, and the two markers still open |
+| `tracks/enovia/test_config_registry.yaml` | **D3** — suite → `test_config_id`. Read at runtime; adding a suite is a data change, never a code change |
 | `docs/poc_execution_guide.md` | Super-detailed, click-by-click PoC companion to plan0 |
 | `tracks/enovia/context.md` | **NOT this file.** Curated Enovia tribal knowledge, prompt-cached at runtime |
 

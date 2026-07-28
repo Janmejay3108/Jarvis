@@ -13,17 +13,26 @@
 
 ## 0. ORIENTATION — machines, accounts, and who runs what
 
-### 0.1 The three machines (know which one you're on for every step)
+### 0.1 The two machines (know which one you're on for every step)
 
 | Tag | Machine | Address | Spec | Role |
 |---|---|---|---|---|
-| **[LAPTOP]** | your dev laptop | — | — | Writing code, running the pure-API PoCs (DAI/Jira/Bitbucket/Claude). Must be on Keysight network/VPN to reach `*.it.keysight.com` and `*.cos.is.keysight.com`. |
-| **[ORCH]** | Orchestrator VM | `aiagent-testmanager.cos.is.keysight.com` (156.140.21.109) | 4 CPU / 32 GB | Where the agent will eventually run. PoC 6 (Claude-from-VM) and Gate-0b smoke run here. |
-| **[RUNNER]** | EPF runner VM | `eggptdai10.cos.is.keysight.com` (156.140.21.30) | 4 CPU / 16 GB | Has Eggplant Functional + `runscript.bat` + the floating license + the RDP SUT. PoC 1 / 1b / 1e run here. |
+| **[LAPTOP]** | Jay's local development machine | — | — | **Where development actually happens.** Writing code, unit tests, and the pure-API PoCs (DAI/Jira/Bitbucket/Claude). Must be on Keysight network/VPN to reach `*.it.keysight.com` and `*.cos.is.keysight.com`. |
+| **[JARVIS VM]** | one machine, every role | `eggptdai10.cos.is.keysight.com` (156.140.21.30) | 4 CPU / 16 GB | **JARVIS DAI 26.2.2** at `https://…:8000/` · co-located **Design + Run agents** · **EPF 26.2.x** · **`C:\Eggplant_Suites`** · the **Enovia working copy** · and the **JARVIS orchestrator + chat app at `:8080`**. Jay-administered. |
 
-> Most API PoCs (2, 2b, 4, 5, 6) can be developed and first-run from **[LAPTOP]**
-> as long as you're on the corporate network. The plan requires PoC 6 and the
-> Gate-0b smoke to also be proven **from [ORCH]** (egress matters there).
+> **`aiagent-testmanager.cos.is.keysight.com`** was the previously designated orchestrator host. It is
+> **superseded** by the `eggptdai10` co-location decision, and the hostname is retained because it
+> belongs to a real, separate org-level initiative.
+>
+> **Development happens on [LAPTOP]; VM deployment comes later.** Most API PoCs (2, 2b, 4, 5, 6) are
+> developed and first-run there. The inherently VM-bound work — **B.2** provisioning, **B.4**'s clone +
+> scheduled tasks, **B.4b**'s DAI authoring, and the **Gate-0b smoke (B.7)** — stays `(User)`-on-VM.
+> **B.7 is the first time the full integration set runs on the target host**, and it is where VM egress
+> to the Anthropic gateway is verified (folded in from PoC 6).
+>
+> The former **EPF-runner** role (Eggplant Functional + `runscript.bat` driving the SUT locally, PoC
+> 1 / 1b / 1e) is **deferred** with the local inner loop. The role is deferred; the machine is not.
+> SUTs stay on their own VMs, connected at execution time.
 
 ### 0.2 Accounts / secrets you'll need (all into `.env`, never committed)
 
@@ -44,7 +53,7 @@
 ### 0.4 One-time laptop setup (do before any PoC)
 
 ```powershell
-# from the project root: C:\Users\janmtiwa\Desktop\Initiative Latest\ai-test-fix-agent
+# from the project root (== the git repo root; the Bitbucket repo is `jarvis`)
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements-poc.txt          # httpx anthropic openai pyyaml python-dotenv rich
@@ -124,9 +133,9 @@ SHA**. This is the per-attempt validation loop plan2 depends on.
 | `.env` key | What it is | Value / source |
 |---|---|---|
 | `JARVIS_REPO_URL` | the **validation** repo | `bitbucket.it.keysight.com/scm/eggauto/agentic-eggplant-automation.git` |
-| `JARVIS_PAT` | PAT with **force-push** rights to `refs/heads/Enovia` | ⚠ CONFIRM (Jay): exact scopes — see plan0 A.7 |
+| `JARVIS_PAT` | PAT with **force-push** rights to `refs/heads/Enovia` | Settled: Jay holds admin on the validation repo; force-push works, no branch-permission exemption outstanding |
 | `JARVIS_BRANCH` | force-push target branch | `Enovia` |
-| `JARVIS_DAI_BASE_URL` | the JARVIS DAI (26.2.2) base | ⚠ CONFIRM (Jay): exact URL/scheme/port — observed as `eggptdai10.cos.is.keysight.com:8000` |
+| `JARVIS_DAI_BASE_URL` | the JARVIS DAI (26.2.2) base | **`https://eggptdai10.cos.is.keysight.com:8000/`** — HTTPS, port 8000. Same VM also serves the JARVIS chat app on `:8080` |
 | `JARVIS_DAI_CLIENT_ID` / `_SECRET` | API client on the **JARVIS** DAI | JARVIS DAI UI → System → API Access |
 | `JARVIS_COMPLETION_MODE` | completion detection | `poll_backoff` (day one); webhook is the upgrade path (**O1**) |
 | `JARVIS_ENOVIA_SUITES_PATH_IN_VM` | Design agent suites folder | `C:\Eggplant_Suites` (git clone of the validation repo) |
@@ -205,19 +214,26 @@ DAI test config left completely untouched. This is the formal workaround for **C
 **D1**.
 
 **The artifact** (`src/analysis/templates/agent_dispatcher.st.j2`, one per suite, **generated every
-cycle**, never hand-edited, **never present in the production repo** — **D4**):
+cycle for every registered suite**, never hand-edited, **never present in the production repo** —
+**D4**). This is the **proven** form, the script whose log lines exist in a real run log:
 ```
 -- {{suite}}_AgentDispatcher.script
 -- JARVIS — dispatcher for {{suite}}.suite (GENERATED — do not hand-edit)
--- Contract: only the targetScript line is rewritten per validation cycle.
+-- Contract: only the targetScript line below is rewritten per validation cycle.
+-- Value = path relative to Scripts/, forward slashes, no .script extension.
 -- No try/catch — a target failure MUST fail this run.
-
-set targetScript to "{{target_rel_path}}"   -- e.g. TestCases/TESTAUTOMA_6167_Verify...
-
-log "start — target=" & targetScript
+set targetScript to "{{target_rel_path}}"
+log "AgentDispatcher: start — target=" & targetScript
 run targetScript
-log "done — target=" & targetScript
+log "AgentDispatcher: done — target=" & targetScript
 ```
+
+**Match on the `AgentDispatcher:` prefix, never on the full line** — the em dash is non-ASCII and log
+encoding must not be able to break a verdict.
+
+**Regeneration rule (F8 / O6).** Every registered suite has its own dispatcher **and its own test
+config**; every push regenerates **all** of them, so the `Enovia` branch is always complete. A
+registered suite with no `smoke_target` is a **hard error at onboarding time**.
 
 **Two SenseTalk rules learned the hard way — both were bugs, both are now binding:**
 - **S1.** A script in `Scripts/TestCases/` must be referenced as **`TestCases/<name>`** — **no
@@ -240,9 +256,9 @@ script, nothing touched in DAI) failed **on the target**, as required. Proven on
 **Proves:** Eggplant Functional can execute an Enovia `.script` from the CLI →
 results folder + exit code. Basis of the fast local inner loop.
 
-**Where:** **[RUNNER] `eggptdai10`** (this is a (User) step — needs the VM, EPF, license, SUT). Script written by the Agent.
+**Where:** **the JARVIS VM `eggptdai10`** (a (User) step — needs the VM, EPF, license, SUT). Script written by the Agent. *Deferred with the local inner loop.*
 
-### Prereqs on [RUNNER]
+### Prereqs on the JARVIS VM
 1. RDP into `eggptdai10` (156.140.21.30).
 2. Confirm Eggplant Functional installed; note the path to `runscript.bat`
    (typically `C:\Program Files\Eggplant\runscript.bat`).
@@ -297,7 +313,7 @@ reflects pass/fail. (User) documents the **results-folder layout** in
 connection without DAI injecting it. Decides whether a fast local inner loop
 exists. **Not project-blocking** — the proven JARVIS validation path serves every attempt.
 
-**Where:** [RUNNER], guided by the Agent.
+**Where:** the JARVIS VM, guided by the Agent. *Deferred with the local inner loop.*
 
 ### Step 1 — does the suite contain an explicit `Connect`?
 ```powershell
@@ -328,7 +344,7 @@ serves every attempt.
 **Proves:** a test that passes under DAI also passes under `runscript` (no hidden
 DAI-injected params / `RunValues` / data).
 
-**Where:** [RUNNER].
+**Where:** the JARVIS VM. *Deferred with the local inner loop.*
 
 ### Steps
 1. Run the PoC-1 test **via DAI** (normal trigger) — note pass/fail + key log lines.
@@ -486,30 +502,38 @@ reliable signal** (plan3 relies on this).
 
 ---
 
-## PoC 6 — Claude reproduces the TESTAUTOMA-8055 diagnosis from the VM  (Step A.9)  ⬜ TODO (must run on [ORCH])
+## PoC 6 — Claude reachable with working credentials  (Step A.9)  ✅ **PROVEN (connectivity, from [LAPTOP])**
 
-**Proves:** the engine + the VM's network egress to the Anthropic gateway work
-on the golden bug.
+**Proves:** the engine is reachable and the credentials work — `MODEL` (Opus 4.7)
+answers through the Keysight gateway.
 
-**Where:** **[ORCH] `aiagent-testmanager`** (egress from the VM is the point).
+**Where:** **[LAPTOP]** — this is where it was actually run.
 
 ### Prereqs
-1. (User) places into `samples/` on the VM: the 8055 test script,
+1. (User) places into `samples/`: the 8055 test script,
    `CommonEnovia.script` (incl. ~line 409), and the DAI failure-log excerpt.
-2. `.env` on the VM has the gateway key + `MODEL=claude-opus-4-7`.
+2. `.env` has the gateway key + `MODEL=claude-opus-4-7`.
 
 ### `scripts/poc_claude.py` should
 - Build a draft diagnosis system prompt (full version lands in plan1).
 - Embed ticket/script/handler/logs **inside untrusted-data delimiters**
   (`<<<TICKET_START … TICKET_END>>>`).
-- Call `MODEL` via `ANTHROPIC_BASE_URL` (proves the gateway path from the VM).
-- Print the diagnosis.
+- Call `MODEL` via `ANTHROPIC_BASE_URL` (proves the gateway path).
+- Print the response.
 
-### Verification / DoD
-The diagnosis names `CommonEnovia.script` ~409 and the
-`and not ImageFound(text:"Name",…)` clause, with the "passed-with-swallowed-
-exceptions" observation. Run **from [ORCH]**; paste output into `poc_results.md`
-A.9. **If egress fails → (User) files the firewall ticket now.**
+### Verification / DoD — ✅ met
+A successful authenticated call returns a response: engine reachable,
+credentials valid, gateway path working. Achieved after root-causing the
+`claude-opus-4-6` whitelist gap and the `load_dotenv(override=True)` masking.
+
+**Two claims this step deliberately does NOT make:**
+- **It was not run on a VM.** VM egress to the gateway is verified in the
+  **Gate-0b smoke (B.7)** on `eggptdai10`. **If egress fails there → (User)
+  files the firewall ticket at that point.**
+- **It did not re-derive the 8055 diagnosis.** Naming `CommonEnovia.script` ~409
+  and the `and not ImageFound(text:"Name",…)` clause with the
+  "passed-with-swallowed-exceptions" observation is **plan1's golden regression**
+  (plan1 §1.4.5, scored at Gate 1) — not weakened, just verified where it belongs.
 
 ### Gotcha
 This is the first hard proof that the **VM** (not just your laptop) can reach
@@ -561,7 +585,7 @@ Print and have the (User) confirm with measured values:
 | 3 — static call-graph + ripgrep | ⬜ |
 | 4 — Bitbucket read/branch/PR | ⬜ |
 | 5 — Jira read/comment/attach + LLM extraction | 🔶 (read+extract done; write ops pending) |
-| 6 — Claude reproduces 8055 from [ORCH] | ⬜ |
+| 6 — Claude reachable with working credentials | ✅ (connectivity, from [LAPTOP]; not a VM run, not a diagnosis reproduction) |
 | 7 — base rate supports approach | ⬜ |
 | dedicated EPF license + RDP SUT secured | ⬜ |
 
@@ -578,7 +602,7 @@ before any build.
 
 1. ~~**2b** (JARVIS validation path)~~ — ✅ **done.** Was the biggest unknown; it unblocked the whole validation story.
 2. **5 write-ops** (`poc_jira.py`) and **4** (`poc_bitbucket.py`) — pure API, quick on [LAPTOP]. For 4, remember the **validation-repo force-push permission is a separate PAT question** from the production-repo PR rights.
-3. **6** (Claude from [ORCH]) — quick once egress is open; run `probe_claude.py` first.
+3. ~~**6** (Claude connectivity)~~ — ✅ **done** from [LAPTOP]. VM egress folds into the Gate-0b smoke (B.7).
 4. **3** (static) — the Agent can unit-test now; VM real-script check when convenient.
 5. ~~**1 → 1b → 1e** (runscript chain)~~ — **deferred**; see `docs/later-enhancements.md` §1.
 6. **B.4b suite onboarding** — the real remaining scale-out work (**O4**): every suite beyond PartMaster needs the D2 sequence before JARVIS can validate tickets against it.

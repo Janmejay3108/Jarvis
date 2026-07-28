@@ -137,7 +137,7 @@ Vite + React + TypeScript + Tailwind. Layout: left sidebar (conversation list + 
 **Style:** clean, dense, engineering-tool aesthetic; dark-mode friendly; no UI library beyond Tailwind + headless primitives.
 
 ### Step 1.6.3 — Wire + build
-`npm run build` → `webapp/dist` served by FastAPI behind SSO. **(User)** open `http://aiagent-testmanager.…:8000/`, log in, type `diagnose TESTAUTOMA-8055`, watch the live run, confirm the Jira comment appeared.
+`npm run build` → `webapp/dist` served by FastAPI behind SSO. **(User)** open `http://eggptdai10.cos.is.keysight.com:8080/` (the JARVIS VM — same host as the JARVIS DAI, which holds `:8000`; see plan_master §1 and §3), log in, type `diagnose TESTAUTOMA-8055`, watch the live run, confirm the Jira comment appeared.
 **Verification:** unauthenticated → redirect/401; full live run renders steps, tool cards, screenshots, diagnosis; history reloads after a browser restart (events replayed from DB).
 **DoD:** chat MVP runs a real ticket end-to-end with live progress.
 

@@ -38,7 +38,7 @@ Flagged prominently rather than buried, per the brief's reporting requirement.
 | # | Conflict | Resolution |
 |---|---|---|
 | **X1** | **Git remote name.** The brief's R3 rename table says remote `practice` → **`agentic-eggplant-automation`**, but §2.1, the §2.5 canonical flow block (`git push jarvis …`), §4.1.10 and §4.2.8 (`git remote add jarvis`) all said **`jarvis`** — 4 occurrences vs 1. | **Asked Jay; ruled `agentic-eggplant-automation`.** Applied everywhere, including inside the canonical flow block, which therefore differs verbatim from the brief's §2.5 listing. Jay's clarification: *"the repo name where the fix will first be uploaded is the `agentic-eggplant-automation` repository; jarvis is not the name of this bitbucket repo."* |
-| **X2** | **`Base.md` does not exist.** The brief names it in the file inventory and explicitly rules it out of scope. | Nothing to leave alone and nothing created. Searched the whole `Jarvis/` tree — no such file. Recorded in Part 5. |
+| **X2** | *(retired in pass 2 — see `plan_change_log_jarvis_2.md`)* | — |
 | **X3** | **`PROGRESS.md` history vs. verification check 2.** §4.7 says existing entries stay **verbatim**; §6 check 2 demands **zero** "Claude Code" hits across a file list that includes `PROGRESS.md`. Its line 9 records the gateway/model-whitelisting saga using that literal string. | **The specific instruction wins.** History left verbatim; one "Claude Code" hit survives in `PROGRESS.md` by design. It is a historical record of what happened on a date, exactly the rationale the brief uses to protect `Base.md`. |
 | **X4** | **Open-item numbering.** §2.8 defines **O1–O5** with O5 = force-push vs multi-suite dispatchers, but §4.2.3 asks for "O1–O7", §4.4.4 and §5 call the multi-suite regeneration policy **O6**, and §4.5.6(a) calls the monthly re-import **O7**. | Reconciled without inventing: **O5** = the *observation* (dispatchers for non-target suites vanish on force-push); **O6** = the *policy decision* pending on it; **O7** = the monthly re-import person-dependency. All seven registered in `PROGRESS.md`. |
 | **X5** | **"five new `JARVIS_*` keys".** §4.2.2 says add five; §3-R3 lists only **three** (`JARVIS_BRANCH`, `JARVIS_ENOVIA_SUITES_PATH_IN_VM`, `JARVIS_COMPLETION_MODE`). | Added the three named. Did **not** invent two more. (Five *renames* did occur: `PRACTICE_REPO_URL`/`_PAT`/`_DAI_BASE_URL`/`_DAI_CLIENT_ID`/`_DAI_CLIENT_SECRET` → `JARVIS_*`, plus one deletion — which may be what "five" referred to.) |
@@ -197,7 +197,7 @@ All other surviving `Claude` occurrences are the model, the API, `claude_client`
 
 | Item | Why |
 |---|---|
-| `Base.md` | Declared out of scope: a historical narrative where the old names are literally accurate for what happened on specific dates. **The file does not exist in this repository** (conflict X2) — nothing to leave alone, nothing created. |
+| ~~`Base.md`~~ | *Carry retired in pass 2 (F10): the file does not exist and never will in this repo, so there is nothing to protect. See `plan_change_log_jarvis_2.md`.* |
 | `AI Agent Test Manager` · `Test Automation Scripts Maintenance & Development` · all `TESTAUTOMA-*` keys · `aiagent-testmanager.cos.is.keysight.com` | Real, external identifiers protected by R1. Verified still present and unmodified. |
 | The 12 `ai-*` Jira labels | Operational identifiers agreed (or to be agreed) with the track team. Left as-is under one marker (M5). |
 | `ai-test-fix-agent` repo slug (4 occurrences) | Real Bitbucket slug; marked (M4), not renamed. |

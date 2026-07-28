@@ -17,23 +17,37 @@ Conclusion: to use claude opus 4.7 for the agent.
     co-located Design+Run agents, full PASSED run with 'Using Git commit SHA' traceable in the run log.
 [x] plan0/0.A/A.2b — 2026-07-28 — Dispatcher pattern proven: AgentDispatcher model action authored and
     validated; target switched purely by git push with the DAI test config untouched.
-[x] plan0/0.B/B.4b — 2026-07-28 — PartMaster onboarded to JARVIS; TEST_CONFIG_ID recorded in
-    tracks/enovia/test_config_registry.yaml. Remaining suites tracked as open item O4.
+[x] plan0/0.B/B.4b — 2026-07-28 — PartMaster onboarded to JARVIS. Registry row VERIFIED present in
+    tracks/enovia/test_config_registry.yaml: suite_dir PartMaster.suite, model Part_Master_Pack_01,
+    test_config_id 0310ac5d-c0c5-49dc-8b04-44c42a33d84e, dispatcher PartMaster_AgentDispatcher.script,
+    smoke_target TestCases/TESTAUTOMA_6167_VerifyDownloadTemplateOptionFromPartMasterWidget.
+    Remaining 16 suites tracked as open item O4.
 [x] docs — 2026-07-28 — Plan set aligned to JARVIS: project renamed to JARVIS, executor renamed to Agent,
     practice terminology retired, validation flow integrated. See docs/plan_change_log_jarvis.md.
+[x] repo — 2026-07-28 — Alignment pass 2. Repo FLATTENED to a single root (repo root == project root ==
+    Bitbucket repo `jarvis`); the nested project directory is gone and all 13 entries moved as git renames,
+    so history follows. Slug retired -> `jarvis` (repo, directory, pyproject name).
+    tracks/enovia/test_config_registry.yaml CREATED with the proven PartMaster row (D3).
+    Dispatcher template corrected to the script that actually ran (AgentDispatcher:-prefixed log lines).
+    NEW safety rule: a changed file resolving to a suite absent from the registry is refused before any
+    push or trigger and routed to diagnose-only. Markers closed: JARVIS DAI base URL, the eggptdai10
+    two-row conflict, chat-app host, PartMaster TEST_CONFIG_ID, validation-repo PAT, branch prefix,
+    repo slug, O6 policy, constraint C3. See docs/plan_change_log_jarvis_2.md.
 
 ---
 
-## OPEN ITEMS (O1–O7) — carried forward, none of these are done
+## OPEN ITEMS (O1–O7)
 
-| ID | Open item | Where it bites |
-|---|---|---|
-| **O1** | Webhook profile not yet registered on JARVIS. `poll_backoff` is the day-one completion mode; webhook is the upgrade path, not a prerequisite. | plan0 A.2 · plan2 §2.5.2 · plan4 §4.0 item 3 |
-| **O2** | Suite-name collision behaviour as suites accumulate on the JARVIS instance (names must be globally unique per instance, C2). Re-check at every onboarding. | plan0 B.4b · plan3 §3.7 |
-| **O3** | Per-cycle validation wall-clock timing across a realistic suite set — not yet measured. | plan2 GATE 2 "avg fix+validation time" row |
-| **O4** | Scale-out: only `Part_Master_Pack_01` / PartMaster is onboarded. Every other suite needs the full D2 onboarding sequence. | plan0 B.4b · plan3 §3.7 |
-| **O5** | Force-push semantics vs. multi-suite dispatchers: force-pushing the full candidate state onto `Enovia` replaces the branch contents, so dispatchers for non-target suites disappear unless regenerated. | plan2 §2.5.0 |
-| **O6** | The policy decision arising from O5. **Recommended invariant (⚠ CONFIRM, not settled):** regenerate dispatchers for every registered suite on every push, so the branch is always complete. | plan2 §2.5.0 |
-| **O7** | Monthly model re-import from the production DAI into JARVIS is an **undocumented manual activity** and must become a written procedure in `docs/maintenance.md`, performed by Jay every time. **Person-dependency.** | plan3 §3.7 |
+| ID | Status | Open item | Where it bites |
+|---|---|---|---|
+| **O1** | **open** | Webhook profile not yet registered on JARVIS. `poll_backoff` is the day-one completion mode; webhook is the upgrade path, not a prerequisite. | plan0 A.2 · plan2 §2.5.2 · plan4 §4.0 item 3 |
+| **O2** | **open** | Suite-name collision behaviour as suites accumulate on the JARVIS instance — **constraint C2** (names must be globally unique per DAI instance). *Corrected 2026-07-28: this was previously mis-cited as C3; C3 is the one-repo-one-branch git-connection constraint.* Re-check at every onboarding. | plan0 B.4b · plan3 §3.7 |
+| **O3** | **open** | Per-cycle validation wall-clock timing across a realistic suite set — not yet measured. Measurable only once the gate runs for real. | plan2 GATE 2 "avg fix+validation time" row |
+| **O4** | **open — biggest scaling item** | Scale-out: only `Part_Master_Pack_01` / PartMaster is onboarded. **16 suites remain**, each needing the full D2 onboarding sequence. This is now the single largest constraint on how much of the ticket flow JARVIS can serve. | plan0 B.4b · plan3 §3.7 |
+| **O5** | ⚠️ **MITIGATED** (2026-07-28) | Force-push semantics vs. multi-suite dispatchers: force-pushing the full candidate state onto `Enovia` replaces the branch contents, so dispatchers for non-target suites disappear unless regenerated. **The mechanic still stands — it is neutralised, not removed, by the O6 rule.** Kept visible so nobody re-introduces a partial regeneration. | plan2 §2.5.0 |
+| **O6** | ✅ **RESOLVED** (2026-07-28) | Every registered suite has its **own** `<Suite>_AgentDispatcher.script` **and its own test config**, which executes that suite's dispatcher. On **every** validation push, JARVIS regenerates the dispatcher for **every suite in the registry**, so the `Enovia` branch is always complete. **A rule, not a recommendation.** Consequence: a registered suite with no `smoke_target` is a hard error at onboarding time. | plan_master §2.3.2 D4 · plan2 §2.5.0 |
+| **O7** | **open** | Monthly model re-import from the production DAI into JARVIS is an **undocumented manual activity** and must become a written procedure in `docs/maintenance.md`, performed by Jay every time. **Person-dependency.** | plan3 §3.7 |
 
-> Full ⚠ CONFIRM (Jay) marker list: `docs/plan_change_log_jarvis.md` Part 1.
+> **Only two questions remain open across the whole plan set** — O3 (real per-cycle timing) and the model
+> re-import runbook specifics. Both need something to actually run before they can be answered. Full list:
+> `docs/plan_change_log_jarvis_2.md` Part 1.
