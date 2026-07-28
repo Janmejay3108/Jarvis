@@ -53,7 +53,7 @@ Copy-Item .env.example .env                   # then fill secrets in .env (never
 
 **Critical gotcha (cost us hours):** every script must call
 `load_dotenv(override=True)`. Without `override=True`, a parent shell that
-already exports `ANTHROPIC_BASE_URL` (IDEs, Claude Code) silently masks your
+already exports `ANTHROPIC_BASE_URL` (IDEs, Agent sessions) silently masks your
 `.env` and your Anthropic calls go to the wrong base URL → misleading
 `401 invalid x-api-key`. Already fixed in our scripts; keep it for any new one.
 
@@ -109,67 +109,129 @@ Endpoints + response shape recorded in `poc_results.md` A.1; screenshot on disk.
 
 ---
 
-## PoC 2b — The Practice path end-to-end  (Step A.2)  ⬜ TODO  ← do next
+## PoC 2b — The JARVIS validation path end-to-end  (Step A.2)  ✅ **PROVEN**
 
-**Proves:** the validation mechanism — push candidate code to the **Practice
-repo** `/practice` branch → trigger the **Practice Test Config** on the
-**Practice DAI** → wait for completion → read the new run's results by runid.
-This is the per-attempt validation loop plan2 depends on.
+**Proves:** the validation mechanism — push the candidate to the **validation
+repo** `agentic-eggplant-automation` branch **`Enovia`** → **assert the pushed
+SHA** → trigger that suite's **JARVIS test config by ID** on the **JARVIS DAI**
+→ wait for completion → read the run's results → **assert the executed commit
+SHA**. This is the per-attempt validation loop plan2 depends on.
 
-**Where:** [LAPTOP] (can develop) + needs (User)-provided Practice infra.
-**Script:** `scripts/poc_practice.py` (to be written).
+**Where:** [LAPTOP] (can develop) + the Jay-administered JARVIS VM.
+**Script:** `scripts/poc_jarvis_validation.py` (to be written).
 
-### (User) must provide FIRST (these are blanks in `.env`)
-| `.env` key | What it is | Where to get it |
+### Recorded values (no longer blanks — these are measured facts)
+| `.env` key | What it is | Value / source |
 |---|---|---|
-| `PRACTICE_REPO_URL` | the separate Practice Bitbucket repo | repo admin |
-| `PRACTICE_PAT` | PAT with push rights to `/practice` | Bitbucket → PAT |
-| `PRACTICE_DAI_BASE_URL` | the Practice DAI server base | DAI admin |
-| `PRACTICE_DAI_CLIENT_ID` / `_SECRET` | API client on the Practice DAI | Practice DAI UI → System → API Access |
-| `PRACTICE_TEST_CONFIG_ID` | the Practice Test Config UUID | **Practice DAI → Controller → Test Config → edit the config → copy the UUID from the browser URL** |
+| `JARVIS_REPO_URL` | the **validation** repo | `bitbucket.it.keysight.com/scm/eggauto/agentic-eggplant-automation.git` |
+| `JARVIS_PAT` | PAT with **force-push** rights to `refs/heads/Enovia` | ⚠ CONFIRM (Jay): exact scopes — see plan0 A.7 |
+| `JARVIS_BRANCH` | force-push target branch | `Enovia` |
+| `JARVIS_DAI_BASE_URL` | the JARVIS DAI (26.2.2) base | ⚠ CONFIRM (Jay): exact URL/scheme/port — observed as `eggptdai10.cos.is.keysight.com:8000` |
+| `JARVIS_DAI_CLIENT_ID` / `_SECRET` | API client on the **JARVIS** DAI | JARVIS DAI UI → System → API Access |
+| `JARVIS_COMPLETION_MODE` | completion detection | `poll_backoff` (day one); webhook is the upgrade path (**O1**) |
+| `JARVIS_ENOVIA_SUITES_PATH_IN_VM` | Design agent suites folder | `C:\Eggplant_Suites` (git clone of the validation repo) |
+| *(no scalar test-config ID)* | suite → `test_config_id` | `tracks/enovia/test_config_registry.yaml` (**D3**) — `PRACTICE_TEST_CONFIG_ID` is retired |
 
-Also confirm with the DAI admin:
-- the Practice Test Config's **git connection is pre-wired to `/practice`**, and
-- its **SUT connection is prebuilt** (so triggering it actually drives a machine).
+**Confirmed with the DAI admin (Jay):**
+- the JARVIS test config's **git connection points at the validation repo** and **syncs at run start** (not a cached clone) — this is what makes the executed-SHA assert meaningful;
+- its **SUT connection (`Jay_130`) is prebuilt** — triggering really drives a machine;
+- the **webhooks admin UI is available and Jay is admin** (so webhooks are enable-able; profile not yet registered — **O1**).
+
+> **Why the test config is never edited per ticket.** DAI public API **v2 exposes no test-config or
+> step create/edit endpoints (C1)**. The config therefore stays **permanently static**, and per-ticket
+> targeting happens entirely through the **dispatcher** (**D1**) — see PoC 2b-bis below.
 
 ### Two ways to trigger (pick one; API is primary)
 
-**Option A — `eggplant-runner` CLI (simplest blocking trigger):**
+**Option A — `eggplant-runner` CLI (blocking trigger; documented, NOT selected):**
 ```powershell
 # download the runner exe once from the DAI server's download page
 .\eggplant-runner-Windows-<ver>.exe `
-  <PRACTICE_DAI_BASE_URL> <PRACTICE_TEST_CONFIG_ID> `
-  --client-id=<PRACTICE_DAI_CLIENT_ID> `
-  --client-secret=<PRACTICE_DAI_CLIENT_SECRET> `
-  --result-path .\practice_result.xml `
+  <JARVIS_DAI_BASE_URL> <TEST_CONFIG_ID from the D3 registry> `
+  --client-id=<JARVIS_DAI_CLIENT_ID> `
+  --client-secret=<JARVIS_DAI_CLIENT_SECRET> `
+  --result-path .\jarvis_result.xml `
   --log-level INFO
 echo "exit: $LASTEXITCODE"     # 0 = PASS, non-zero = FAIL
 ```
 - It **blocks until the run finishes** and writes JUnit XML to `--result-path`.
-- Add `--ca-cert-path <pem>` if the Practice DAI uses a self-signed cert.
+- Add `--ca-cert-path <pem>` if the JARVIS DAI uses a self-signed cert.
 
-**Option B — REST API (what the agent will use in code):**
-1. Token: `POST {PRACTICE_DAI_BASE_URL}/auth/realms/eggplant/protocol/openid-connect/token` (same client_credentials shape as PoC 2).
-2. Start: `POST {PRACTICE_DAI_BASE_URL}/execution_service/api/v1/executions` (body references the test config) → returns an execution id.
-3. Poll: `GET {PRACTICE_DAI_BASE_URL}/ai/runs` until your run shows completed; capture its **runid**.
-4. Results: reuse PoC-2 functions against the **Practice** DAI base URL → log + screenshot by runid (on FAIL) or PASS status.
+**Option B — REST API (✅ SELECTED — what the agent uses in code):**
+1. **Auth:** `POST {JARVIS_DAI_BASE_URL}/api/v2/auth` with `client_id` / `client_secret` → bearer token, **~10-minute expiry**, cached in-process and refreshed on expiry.
+   > **This is NOT the production DAI's scheme.** The production DAI (`epcorpappsdai12`) uses OAuth2 client-credentials against the Keycloak realm (`/auth/realms/eggplant/protocol/openid-connect/token`). Never share a client, base URL or token cache between the two instances.
+2. **Trigger:** the existing, already-tested trigger-a-test-config-by-ID API, using the ID from the D3 registry.
+3. **Wait:** `poll_backoff` — `asyncio.sleep` loop, backoff `[15, 30, 60, 120]`s, timeout covering the observed 20 min–2 hr range. No LLM in the wait path; cost must be **$0** between trigger and resolution.
+4. **Results chain (v2):**
+   ```
+   GET /api/v2/test_config_results?test_config_id=<ID>   → newest result id
+   GET /api/v2/test_results?test_config_result_id=<id>   → step result + status
+   GET /api/v2/test_results/{test_result_id}/logs        → entries (message, severity,
+                                                             message_type, image_id)
+   GET /api/v2/screenshots/{screenshot_id}               → PNG (PoC-2 walk-back reused)
+   ```
 
-### `scripts/poc_practice.py` should
-1. `git clone`/pull the Practice repo to a temp dir; `git checkout -B practice`.
-2. Make a trivial change (e.g. add a comment line to one `.script`), `git commit`, `git push practice HEAD:refs/heads/practice --force`.
-3. Trigger (Option A or B); capture the new runid.
-4. Poll to completion; fetch that run's log + error screenshot (PoC-2 funcs) or confirm PASS.
-5. **Print the full timeline with durations:** push → trigger → complete (this is your per-attempt validation latency).
+### `scripts/poc_jarvis_validation.py` should
+1. Pull the working copy; render the dispatcher for the target suite; `git commit`.
+2. `git push agentic-eggplant-automation wc/<TICKET>:refs/heads/Enovia --force`; record the pushed SHA.
+3. **UP-24 pre-check:** assert `git ls-remote agentic-eggplant-automation refs/heads/Enovia` **==** the pushed SHA.
+4. Trigger the registry's `test_config_id`; poll to completion via `poll_backoff`.
+5. Walk the four-call v2 results chain → status + log + screenshots.
+6. **UP-24 post-check:** assert the run log's `Using Git commit SHA: '<sha>'` **==** the pushed SHA.
+7. **Print the full timeline with durations:** push → assert → trigger → complete → assert (this is the per-attempt validation latency — still unmeasured across a realistic suite set, **O3**).
 
-### Verification / DoD
-A code push demonstrably reaches the SUT run and its results are fetched by
-runid; cycle time recorded in `poc_results.md` A.2. *If the API trigger is
-awkward, record `eggplant-runner` as the viable alternative.*
+### Verification / DoD — ✅ met
+A code push demonstrably reached the SUT run (evidenced by the commit SHA in the run log) and its
+results were fetched programmatically via the v2 chain. **A full PASSED run with
+`Using Git commit SHA` traceable in the run log has been achieved.** `poll_backoff` recorded as
+`JARVIS_COMPLETION_MODE`; `eggplant-runner` recorded as the documented, unselected alternative.
 
 ### Gotchas
-- Force-push to `/practice` every time so drift never matters for validation correctness.
-- DAI tokens expire in ~5 min — re-acquire before long polls.
-- Find the TEST_CONFIG_ID from the **URL** when editing the config, not the display name.
+- **Force-push to `Enovia` every time** so drift never matters for validation correctness. Note the
+  side effect: the branch contents are wholly replaced, so dispatchers for **other** suites vanish
+  unless regenerated (**O5**; policy pending as **O6**).
+- **JARVIS DAI tokens expire in ~10 min** — re-acquire before long polls. (The production DAI's
+  Keycloak tokens expire in ~5 min; different instance, different lifetime.)
+- Find the `TEST_CONFIG_ID` from the **URL** when editing the config, not the display name — then
+  record it in `tracks/enovia/test_config_registry.yaml`, not in an env var.
+- **Reruns must be OFF** on the test config, or a flaky retry masks a real target failure.
+
+---
+
+## PoC 2b-bis — Dispatcher pattern proof  (Step A.2b)  ✅ **PROVEN**
+
+**Proves:** the script a validation run executes can be switched **purely by a git push**, with the
+DAI test config left completely untouched. This is the formal workaround for **C1** and the proof of
+**D1**.
+
+**The artifact** (`src/analysis/templates/agent_dispatcher.st.j2`, one per suite, **generated every
+cycle**, never hand-edited, **never present in the production repo** — **D4**):
+```
+-- {{suite}}_AgentDispatcher.script
+-- JARVIS — dispatcher for {{suite}}.suite (GENERATED — do not hand-edit)
+-- Contract: only the targetScript line is rewritten per validation cycle.
+-- No try/catch — a target failure MUST fail this run.
+
+set targetScript to "{{target_rel_path}}"   -- e.g. TestCases/TESTAUTOMA_6167_Verify...
+
+log "start — target=" & targetScript
+run targetScript
+log "done — target=" & targetScript
+```
+
+**Two SenseTalk rules learned the hard way — both were bugs, both are now binding:**
+- **S1.** A script in `Scripts/TestCases/` must be referenced as **`TestCases/<name>`** — **no
+  `.script` extension**, **no `Scripts/` prefix**. EPF does not auto-search subfolders.
+- **S2.** Dynamic invocation is plain **`run targetScript`**. Dot-notation `targetScript.run()` does
+  **not** work.
+
+**The missing `try/catch` is deliberate and load-bearing.** A swallowed target failure would produce a
+**false PASS** — the worst possible failure mode for this system.
+
+**Verification / DoD — ✅ met:** the **same `test_config_id`** executed a **different script**, with
+the only difference being a git push. The negative test (target switched to a deliberately broken
+script, nothing touched in DAI) failed **on the target**, as required. Proven on
+`Part_Master_Pack_01` / PartMaster.
 
 ---
 
@@ -178,7 +240,7 @@ awkward, record `eggplant-runner` as the viable alternative.*
 **Proves:** Eggplant Functional can execute an Enovia `.script` from the CLI →
 results folder + exit code. Basis of the fast local inner loop.
 
-**Where:** **[RUNNER] `eggptdai10`** (this is a (User) step — needs the VM, EPF, license, SUT). Script written by Claude Code.
+**Where:** **[RUNNER] `eggptdai10`** (this is a (User) step — needs the VM, EPF, license, SUT). Script written by the Agent.
 
 ### Prereqs on [RUNNER]
 1. RDP into `eggptdai10` (156.140.21.30).
@@ -225,13 +287,17 @@ reflects pass/fail. (User) documents the **results-folder layout** in
 
 ---
 
-## PoC 1b — SUT connection OUTSIDE DAI  (Step A.4)  ⬜ TODO  ← decides INNER_LOOP
+## PoC 1b — SUT connection OUTSIDE DAI  (Step A.4)  *(DEFERRED — optional latency optimisation)*
+
+> **Deferred.** The JARVIS validation gate is the **single mandated validation mechanism** and is
+> proven, so `VALIDATION_MECHANISM=jarvis-dai` is already recorded and the local inner loop is not on
+> the critical path. Retained as a documented option — see `docs/later-enhancements.md` §1.
 
 **Proves (or disproves):** whether `runscript` can establish the RDP SUT
 connection without DAI injecting it. Decides whether a fast local inner loop
-exists. **Not project-blocking** — PoC 2b's Practice path is the fallback.
+exists. **Not project-blocking** — the proven JARVIS validation path serves every attempt.
 
-**Where:** [RUNNER], guided by Claude Code.
+**Where:** [RUNNER], guided by the Agent.
 
 ### Step 1 — does the suite contain an explicit `Connect`?
 ```powershell
@@ -239,20 +305,21 @@ rg -n "Connect\b|ConnectionInfo|RemoteWorkInterval|RDP" C:\agent\repo\Enovia
 ```
 
 ### Step 2 — branch on the result
-- **(A) explicit `Connect` found** → Claude Code writes a one-line probe:
+- **(A) explicit `Connect` found** → the Agent writes a one-line probe:
   ```
   Connect ServerID:"<sut>", … 
   Log "connected: " & ConnectionInfo()
   Disconnect
   ```
-  Run it via `runscript`. Connects → **A holds** → `INNER_LOOP=local-runscript`.
+  Run it via `runscript`. Connects → **A holds** → `VALIDATION_MECHANISM=local-runscript (deferred)`.
 - **(B) no `Connect` — DAI injects it** → either
-  - **(b1)** Claude Code writes a thin connection-wrapper script the agent prepends for validation (SUT details from DAI's environment) → still `local-runscript`; or
-  - **(b2)** fall back to the **Practice path for every attempt** → `INNER_LOOP=practice-dai`.
+  - **(b1)** the Agent writes a thin connection-wrapper script the agent prepends for validation (SUT details from DAI's environment) → still `local-runscript`; or
+  - **(b2)** use the **JARVIS validation gate for every attempt** → `VALIDATION_MECHANISM=jarvis-dai`.
 
-### DoD — record EXACTLY ONE in `poc_results.md` A.4 and later `.env`
-`INNER_LOOP=local-runscript`  **or**  `INNER_LOOP=practice-dai`.
-**Plan 2 branches on this flag.**
+### DoD — record the selected mechanism in `poc_results.md` A.4 and `.env`
+**`VALIDATION_MECHANISM=jarvis-dai` — already selected and recorded.** The local-runscript variant
+(A / b1) stays **documented but unselected**. **Plan 2 no longer branches on a flag**; the JARVIS gate
+serves every attempt.
 
 ---
 
@@ -270,7 +337,7 @@ DAI-injected params / `RunValues` / data).
 
 ### DoD
 Documented parity, OR a documented list of DAI-supplied params to pass via
-`-param`/globals. **If parity can't be bridged → set `INNER_LOOP=practice-dai`.**
+`-param`/globals. **If parity can't be bridged → set `VALIDATION_MECHANISM=jarvis-dai`.**
 
 ---
 
@@ -279,7 +346,7 @@ Documented parity, OR a documented list of DAI-supplied params to pass via
 **Proves:** deterministic retrieval (the RAG replacement) works on real Enovia
 scripts — call chains and "who calls this handler" are correct.
 
-**Where:** Claude Code writes + unit-tests on **[LAPTOP]** with synthetic
+**Where:** the Agent writes + unit-tests on **[LAPTOP]** with synthetic
 fixtures; (User) runs on the **VM clone** for the real-script check.
 
 ### Install ripgrep (both [LAPTOP] and the VMs)
@@ -293,7 +360,7 @@ rg --version          # confirm; reopen shell if PATH not picked up
 - Regex calls: `\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\b`.
 - `call_chain(test_path, depth=3)` — recursive handler resolution.
 - `blast_radius(handler)` = `rg -n "\b<handler>\b" <repo>`.
-- Ship `tests/test_poc_static.py` with synthetic SenseTalk fixtures (Claude Code can fully verify the logic locally — no VM needed for unit tests).
+- Ship `tests/test_poc_static.py` with synthetic SenseTalk fixtures (the Agent can fully verify the logic locally — no VM needed for unit tests).
 
 ### Verification (on the VM clone)
 - The 8055 chain surfaces `EngineeringCentral → CommonEnovia` (incl. `searchEnovia`).
@@ -328,7 +395,7 @@ GET {B}/rest/api/1.0/projects/EGGAUTO/repos/enovia-plm-test-automation/browse/<p
 **Create a branch (note the `branch-utils` API, not `api/1.0`):**
 ```
 POST {B}/rest/branch-utils/latest/projects/EGGAUTO/repos/enovia-plm-test-automation/branches
-Body: {"name":"ai-fix/POC-TEST","startPoint":"Testing_Mar10"}
+Body: {"name":"Jarvis-fix/POC-TEST","startPoint":"Testing_Mar10"}
 → 201
 ```
 
@@ -339,7 +406,7 @@ Body:
 {
   "title": "POC test PR",
   "description": "delete me",
-  "fromRef": {"id":"refs/heads/ai-fix/POC-TEST",
+  "fromRef": {"id":"refs/heads/Jarvis-fix/POC-TEST",
               "repository":{"slug":"enovia-plm-test-automation","project":{"key":"EGGAUTO"}}},
   "toRef":   {"id":"refs/heads/Testing_Mar10",
               "repository":{"slug":"enovia-plm-test-automation","project":{"key":"EGGAUTO"}}}
@@ -485,11 +552,12 @@ Print and have the (User) confirm with measured values:
 
 | PoC | Proven? |
 |---|---|
-| 2 — DAI log + error screenshot by runid | ✅ |
-| 2b — Practice path: push → trigger → fetch results | ⬜ |
-| 1 — runscript headless + results folder | ⬜ |
-| 1b — SUT outside DAI → **INNER_LOOP flag set** | ⬜ |
-| 1e — runscript ≡ DAI parity (local-runscript path only) | ⬜ / n.a. |
+| 2 — production-DAI log + error screenshot by runid | ✅ |
+| 2b — **JARVIS validation path**: push `Enovia` → SHA assert → trigger → fetch results → executed-SHA assert | ✅ |
+| 2b-bis — **Dispatcher pattern** (A.2b): target switched purely by git push | ✅ |
+| 1 — runscript headless + results folder | n.a. (deferred) |
+| 1b — SUT outside DAI → **`VALIDATION_MECHANISM=jarvis-dai` recorded** | n.a. (deferred) |
+| 1e — runscript ≡ DAI parity (local-runscript path only) | n.a. (deferred) |
 | 3 — static call-graph + ripgrep | ⬜ |
 | 4 — Bitbucket read/branch/PR | ⬜ |
 | 5 — Jira read/comment/attach + LLM extraction | 🔶 (read+extract done; write ops pending) |
@@ -498,20 +566,22 @@ Print and have the (User) confirm with measured values:
 | dedicated EPF license + RDP SUT secured | ⬜ |
 
 **Pass rule:** PoC **7** must pass; PoC **2 + 5** (the runid evidence chain) must
-pass; and **at least one** validation mechanism — PoC **1/1b** (local runscript)
-**or** PoC **2b** (Practice path) — must pass. If none of the validation
-mechanisms work, or the evidence chain or base rate fails → **STOP and
-re-architect that part** before any build.
+pass; and **the JARVIS validation path (2b + 2b-bis) must pass** — JARVIS is the
+single mandated validation mechanism, so the old either/or with the local
+runscript loop no longer applies. **Both are proven.** If the validation path,
+the evidence chain, or the base rate fails → **STOP and re-architect that part**
+before any build.
 
 ---
 
 ## SUGGESTED EXECUTION ORDER (fastest de-risking first)
 
-1. **2b** (Practice path) — biggest unknown + unblocks the whole validation story. Needs (User) Practice infra.
-2. **5 write-ops** (`poc_jira.py`) and **4** (`poc_bitbucket.py`) — pure API, quick on [LAPTOP].
+1. ~~**2b** (JARVIS validation path)~~ — ✅ **done.** Was the biggest unknown; it unblocked the whole validation story.
+2. **5 write-ops** (`poc_jira.py`) and **4** (`poc_bitbucket.py`) — pure API, quick on [LAPTOP]. For 4, remember the **validation-repo force-push permission is a separate PAT question** from the production-repo PR rights.
 3. **6** (Claude from [ORCH]) — quick once egress is open; run `probe_claude.py` first.
-4. **3** (static) — Claude Code can unit-test now; VM real-script check when convenient.
-5. **1 → 1b → 1e** (runscript chain) — needs [RUNNER] + license; 1b sets `INNER_LOOP`.
+4. **3** (static) — the Agent can unit-test now; VM real-script check when convenient.
+5. ~~**1 → 1b → 1e** (runscript chain)~~ — **deferred**; see `docs/later-enhancements.md` §1.
+6. **B.4b suite onboarding** — the real remaining scale-out work (**O4**): every suite beyond PartMaster needs the D2 sequence before JARVIS can validate tickets against it.
 6. **7** (base rate) — parallelizable any time; needs ≥50 Done tickets + human labeling.
 
 ---
