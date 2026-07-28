@@ -1,19 +1,19 @@
-# AI TEST FIX AGENT (ENOVIA) — MASTER PLAN v2 (FOR CLAUDE CODE)
+# JARVIS (ENOVIA) — MASTER PLAN v2 (FOR THE AGENT)
 
-**Audience:** Claude Code (the AI IDE) executing this build, and the User (Jay) performing infrastructure/credential/review tasks.
-**Scope:** Build the Enovia-only AI Test Fix Agent end to end — from zero code to a production **chat web application** where a user types a Jira ticket ID (or a natural-language command) into a chat interface and watches the agent diagnose, fix, validate and open a Bitbucket PR, live. Multi-track expansion is out of scope (later playbook).
+**Audience:** the Agent (the AI IDE) executing this build, and the User (Jay) performing infrastructure/credential/review tasks.
+**Scope:** Build the Enovia-only **JARVIS (Automation Testing Agent)** end to end — from zero code to a production **chat web application** where a user types a Jira ticket ID (or a natural-language command) into a chat interface and watches JARVIS diagnose, fix, validate and open a Bitbucket PR, live. Multi-track expansion is out of scope (later playbook).
 
 ---
 
-## 0. HOW CLAUDE CODE MUST EXECUTE THIS PLAN SET
+## 0. HOW THE AGENT MUST EXECUTE THIS PLAN SET
 
 1. **Read this master file completely before any plan file.** It is the single source of truth for architecture, repo layout, infra facts, the event contract, and conventions.
 2. **Execute plans strictly in order:** `plan0_poc_and_foundation.md` → `plan1_diagnosis_and_chat.md` → `plan2_autofix_and_validation.md` → `plan3_lifecycle_rollout.md`. Within a plan, execute Phases in order; within a Phase, execute Steps in order.
-3. **Step protocol.** Every step has: *Owner* (`Claude Code` or `(User)` or `Claude Code + (User)`), *Goal*, *Actions*, *Verification*, *DoD*. Do not begin a step until the previous step's DoD is met. Maintain a running checklist file `PROGRESS.md` at repo root: append `[x] planN/phase/step — <date> — <one-line result>` after each step.
+3. **Step protocol.** Every step has: *Owner* (`Agent` or `(User)` or `Agent + (User)`), *Goal*, *Actions*, *Verification*, *DoD*. Do not begin a step until the previous step's DoD is met. Maintain a running checklist file `PROGRESS.md` at repo root: append `[x] planN/phase/step — <date> — <one-line result>` after each step.
 4. **(User) steps:** when a step (or sub-action) is marked **(User)**, STOP and print a clear, numbered request to the user (what to do, where, what output/credential to paste back). Resume only after the user provides the result. Never fabricate credentials, API responses, or PoC results.
 5. **Gate discipline:** Gates (0a, 0b, 1, 2, 3) are forced pauses. Print the gate checklist, ask the user to confirm each line with measured values. If a metric misses, do not proceed — diagnose and fix the cause. Every accuracy metric is reported as **point estimate + 95% Wilson confidence interval**.
 6. **Testing discipline:** every Python module gets pytest unit tests in `tests/` (mock external services with `pytest-httpx`). Run `ruff check`, `mypy` (lenient), and `pytest` after each phase. The golden regression — TESTAUTOMA-8055 — must keep passing at every later phase.
-7. **Environment reality:** the production runtime is Windows VMs. Claude Code may develop and unit-test anywhere, but anything touching `runscript`, the Practice DAI trigger, RDP SUTs, or corporate intranet endpoints is a **(User)** execution step on the VMs. Write code OS-aware (use `pathlib`, config-driven paths, no hardcoded `C:\`).
+7. **Environment reality:** the production runtime is Windows VMs. The Agent may develop and unit-test anywhere, but anything touching `runscript`, RDP SUTs, or corporate intranet endpoints is a **(User)** execution step on the VMs. **Additionally: anything touching the JARVIS DAI, its Design/Run agents, or a push to the validation repo is a (User) execution step on the VMs** — those live on the Jay-administered JARVIS VM, not on a developer laptop. Write code OS-aware (use `pathlib`, config-driven paths, no hardcoded `C:\`).
 8. **Never** commit secrets; never write to `Testing_Mar10`; never merge a PR; never bypass a gate.
 
 ---
@@ -25,8 +25,8 @@ A web app at `http://eggptdai10.cos.is.keysight.com:8080/` (SSO-gated):
 - **Chat interface.** The user types `fix TESTAUTOMA-8055`, `diagnose TESTAUTOMA-9123`, or just pastes a ticket ID , uses may or may not provide some additional inputs which may be helpful for solving the tickets . An intent parser maps the message to a pipeline mode.
 - **Live progress.** The agent streams its work into the chat as messages and collapsible cards (steps, tool calls, diffs, screenshots, logs) over SSE.
 -  The life progress is shown on the screen in a timeline-type UI. Each step comes one after another. After one pointer finishes, another pops out of it as a timeline form UI form, and that starts etc.
-- **Human-in-the-loop approval.** Before any Bitbucket write, the agent posts the diff + validation evidence in chat with **Approve & Create PR / Reject** buttons (configurable auto mode later).
-- **Lifecycle automation.** On approval: branch `ai-fix/<TICKET>` pushed, PR opened into `Testing_Mar10`, Jira comment + label + screenshot attachments posted, trajectory logged.
+- **Human-in-the-loop approval.** Before any **production** Bitbucket write, JARVIS posts the diff + validation evidence in chat with **Approve & Create PR / Reject** buttons (configurable auto mode later).
+- **Lifecycle automation — two repos, one direction.** Validation runs on the **JARVIS DAI** against the **validation repo** (`agentic-eggplant-automation`, branch `Enovia`), which is force-pushed with the candidate state on every validation cycle. Only on **PASS + approval** does the fix reach the **production** Enovia repo (`enovia-plm-test-automation`): branch `Jarvis-fix/<TICKET>` is pushed to `origin` and a PR is opened into `Testing_Mar10`, with Jira comment + label + screenshot attachments posted and the trajectory logged. The production repo is never written during validation; the validation repo is never the PR target.
 - **History & metrics.** Conversation/run history sidebar; a metrics page (pass rates with CIs, PR acceptance, cost, time saved).
 - **Safety.** Revert button per merged fix; SUT lock; budget caps; graceful degradation (a failed run always leaves a diagnosis/branch/label behind).
 
@@ -36,9 +36,9 @@ A web app at `http://eggptdai10.cos.is.keysight.com:8080/` (SSO-gated):
 
 ### 2.1 Base design (proven; updated per Roadmap)
 - **Engine:** **Claude Opus 4.7 for ALL diagnosis and fix-generation calls, from day one** — no Sonnet default, no model escalation ladder. Model ID (`claude-opus-4-7`) and the Anthropic base URL (the Keysight gateway) come from config. "Escalation" on retries = **adding extended thinking**, not switching models. (Originally targeted `claude-opus-4-6`; switched to `4-7` after PoC 2 — `4-6` is not whitelisted on the Keysight gateway while `4-5` and `4-7` are. `4-7` is the newer of the two.)
-- **Evidence flow (runid-first, LLM-reasoned at two points):** the Jira ticket **carries the DAI `runid` of the failing execution**, but the runid can live anywhere in the response (description, summary, custom field, comment, attachment name) and appear in any form (`runid`, `run id`, `Run ID`, `RUN ID`, `testrunid=`, …). The agent therefore **uses the LLM to extract** four fields from the Jira response — `runid`, `title`, `description`, comments (for any addtional inputs if present) , `test_script_name` — via a forced-tool-call (structured output). It then calls the **(User)-provided, already-tested DAI APIs** to fetch that run's log. The log typically contains MANY image/text-lookup failures; only one corresponds to the user-reported ticket. The agent therefore **uses the LLM a second time** to pick the single log entry whose `message` is something like error and also semantically matches the ticket's `title`+`description`. From that entry's index, a **deterministic walk-back** finds the most recent prior entry whose `image_id` is non-null (Eggplant captures the screen, *then* attempts the action — so the last captured frame before the failure IS the frame the lookup ran against). That `image_id` feeds the screenshot fetch endpoint. Failing script name from the log corroborates the test-script name extracted from Jira and seeds localization.
+- **Evidence flow (runid-first, LLM-reasoned at two points):** the Jira ticket **carries the DAI `runid` of the failing execution**, but the runid can live anywhere in the response (description, summary, custom field, comment, attachment name) and appear in any form (`runid`, `run id`, `Run ID`, `RUN ID`, `testrunid=`, …). The agent therefore **uses the LLM to extract** four fields from the Jira response — `runid`, `title`, `description`, comments (for any addtional inputs if present) , `test_script_name` — via a forced-tool-call (structured output). It then calls the **(User)-provided, already-tested DAI APIs** to fetch that run's log. The log typically contains MANY image/text-lookup failures; only one corresponds to the user-reported ticket. The agent therefore **uses the LLM a second time** to pick the single log entry whose `message` is something like error and also semantically matches the ticket's `title`+`description`. From that entry's index, a **deterministic walk-back** finds the most recent prior entry whose `image_id` is non-null (Eggplant captures the screen, *then* attempts the action — so the last captured frame before the failure IS the frame the lookup ran against). That `image_id` feeds the screenshot fetch endpoint. Failing script name from the log corroborates the test-script name extracted from Jira and seeds localization. **This entire runid-first evidence chain reads the *production* DAI (`epcorpappsdai12`, DAI 25.3.1+0) — the evidence source. It is a different instance from the *JARVIS* DAI (26.2.2) that executes validation runs (§2.3), and the two use different auth schemes: production is OAuth2 client-credentials against the Keycloak realm, JARVIS is `POST /api/v2/auth` → a ~10-minute bearer token. Never conflate the two.**
 - **Grounding:** deterministic — SenseTalk static call-graph + ripgrep blast radius + curated `tracks/enovia/context.md`. **No vector DB.**
-- **Validation:** Tier-0 lint, then one of two SUT mechanisms (flag `INNER_LOOP`): **(a) local EPF `runscript` inner loop** on the runner VM (fast, if PoC 1b proves it), and/or **(b) the Practice path** — push the fix to the **Practice Bitbucket repo** `/practice` branch → trigger the **Practice Test Config** on the **Practice DAI server** via its (already-tested) API → wait for completion → fetch the new run's log/screenshot by runid → PASS/FAIL. The **production** Bitbucket repo is touched **only after** PASS + approval (plan3 PR).
+- **Validation:** Tier-0 lint, then **the JARVIS validation gate** — the single mandated SUT mechanism, proven end-to-end on real infrastructure. Push the candidate to the **validation repo** `agentic-eggplant-automation` branch `Enovia` → assert the pushed SHA → trigger that suite's **JARVIS test config** by ID on the **JARVIS DAI** → wait for completion → fetch the run's results/log/screenshots → assert the executed commit SHA → PASS/FAIL. The full canonical flow, including the dispatcher pattern that makes it possible, is **§2.3**. The **production** Bitbucket repo is touched **only after** PASS + approval (plan3 PR). *A local EPF `runscript` inner loop remains a possible future latency optimisation; it is out of scope for this version and is not required by any gate. It will be checked or added later in JARVIS as an update or enhancement (see `docs/later-enhancements.md`).*
 - **Evidence:** DAI/runscript screenshots + Jira attachments. No SharePoint/Azure AD.
 - **Method:** base-rate study first; Wilson CIs at every gate. **No fine-tuning** — log trajectories.
 
@@ -64,6 +64,117 @@ A web app at `http://eggptdai10.cos.is.keysight.com:8080/` (SSO-gated):
 
 ---
 
+### 2.3 THE VALIDATION FLOW (canonical)
+
+> This section is the authoritative description of how a candidate fix is validated. Plan0 A.2/A.2b
+> prove it, plan2 §2.5 builds it, plan4 §4.7.2 hardens it. Everything here is **proven on real
+> infrastructure** unless carried as an open item (O1–O7).
+
+#### 2.3.1 Platform constraints discovered (these are *why* the design is what it is)
+
+- **C1.** DAI public API **v2 has no test-config or step create/edit endpoints.** A test config's steps
+  cannot be rewritten per ticket via API. **This is the constraint that forced the dispatcher (D1).**
+- **C2.** Suite names must be **globally unique across a DAI instance.**
+- **C3.** ⚠ **CONFIRM (Jay):** C3 is referenced by open item **O2** (suite-name collision behaviour as
+  suites accumulate) and by the "C1–C4" range, but its exact statement was not supplied — placeholder,
+  not a fact. Provide the constraint text, or confirm that O2's collision behaviour *is* C3 and that
+  the range should read C1–C2, C4.
+- **C4.** Model exports restore internal structure but **not** suite links or test configs — those are
+  re-authored after import.
+
+#### 2.3.2 Ratified architecture decisions (D1–D5)
+
+- **D1 — Dispatcher pattern.** Because of C1, the test config stays **permanently static**; only *file
+  content* changes, and it changes **via git**. Each suite gets one permanent test config whose single
+  test case wraps a dispatcher action. Per validation cycle, only the dispatcher script's target line
+  changes.
+- **D2 — Model-per-suite topology.** Each suite's model is exported from the production DAI and
+  imported into the JARVIS DAI. One-time authoring per suite (**done by the User: Jay**): create model
+  action `AgentDispatcher` → attach snippet `<Suite>_AgentDispatcher.script` → create test case
+  (`cleanupSUT` + `AgentDispatcher`) → create a **model-based** test config (SUT **by name**, **reruns
+  OFF**, generous run timeout). Authoring is done against the Design agent's local suites folder
+  (`C:\Eggplant_Suites`). **Every one-time DAI setup of this kind is a (User) task, never an Agent task.**
+- **D3 — Test-config registry.** The mapping *suite → `test_config_id`* is recorded once per suite in a
+  versioned registry file (`tracks/enovia/test_config_registry.yaml`) and looked up at runtime. There is
+  **no single `PRACTICE_TEST_CONFIG_ID` env var any more** — that scalar is replaced by this registry.
+  The per-suite mapping (*which test config to trigger for a script change in which suite*) is
+  **provided by the User (Jay)** and stored in this registry.
+- **D4 — Dispatcher as generated artifact.** `<Suite>_AgentDispatcher.script` is **generated by JARVIS
+  from a template on every validation cycle**. It **never exists in the production repo** and must
+  **never** appear in a `Jarvis-fix/<TICKET>` branch or PR. Every validation push carries freshly
+  generated dispatchers.
+- **D5 — Target reference form.** The dispatcher's target is written using the proven SenseTalk path
+  rules in §2.3.6 (S1/S2).
+
+#### 2.3.3 The dispatcher artifact
+
+Template location: `src/analysis/templates/agent_dispatcher.st.j2`.
+
+```
+-- {{suite}}_AgentDispatcher.script
+-- JARVIS — dispatcher for {{suite}}.suite (GENERATED — do not hand-edit)
+-- Contract: only the targetScript line is rewritten per validation cycle.
+-- No try/catch — a target failure MUST fail this run.
+
+set targetScript to "{{target_rel_path}}"   -- e.g. TestCases/TESTAUTOMA_6167_Verify...
+
+log "start — target=" & targetScript
+run targetScript
+log "done — target=" & targetScript
+```
+
+The absence of `try/catch` is **deliberate and load-bearing**: a swallowed target failure would produce
+a false PASS, which is the worst possible failure mode for this system.
+
+#### 2.3.4 The canonical flow
+
+```
+FixValidationLoop produces a candidate on local branch wc/<TICKET>
+  → derive suite from the affected file path
+  → look up test_config_id for that suite (D3 registry)
+  → render <Suite>_AgentDispatcher.script from the template with the target (D4/D5) → commit
+  → git push agentic-eggplant-automation wc/<TICKET>:refs/heads/Enovia --force   (UNDER THE TRACK LOCK)
+  → ASSERT  git ls-remote agentic-eggplant-automation refs/heads/Enovia == pushed SHA
+                                                                  (UP-24 pre-check, mandatory)
+  → trigger the test config by ID (existing trigger API)
+  → wait per JARVIS_COMPLETION_MODE (poll_backoff day 1 → webhook once registered)
+        NO LLM IN THE WAIT PATH — plain orchestrator coroutine only
+  → fetch results:
+        GET /api/v2/test_config_results?test_config_id=<ID>      → newest result id
+        GET /api/v2/test_results?test_config_result_id=<id>      → step result + status
+        GET /api/v2/test_results/{test_result_id}/logs           → entries (message, severity,
+                                                                    message_type, image_id)
+        GET /api/v2/screenshots/{screenshot_id}                  → PNG (walk-back logic reused)
+  → ASSERT  run log "Using Git commit SHA: '<sha>'" == pushed SHA (UP-24 post-check)
+  → status PASSED | FAILED | ERROR | CANCELLED
+  → verdict + evidence returned to the retry controller
+  → release the track lock
+```
+
+Force-push is safe **because** the branch is disposable and the lock serialises writers.
+
+#### 2.3.5 API surface and auth (JARVIS DAI)
+
+- **Auth:** `POST /api/v2/auth` with `client_id` / `client_secret` from JARVIS **API Access** → bearer
+  token, **~10-minute expiry** → cache in-process and refresh on expiry.
+- **Results chain:** the four `GET` calls listed in §2.3.4.
+- **Trigger:** the existing, already-tested API (trigger a test config by ID).
+- **Dual-auth warning.** The **production** DAI evidence endpoints in §3 (`/ai/runlogs/{runid}`,
+  `/api/v2/screenshots/{image_id}`, OAuth2 client-credentials against the Keycloak realm) are
+  **unchanged** and belong to the **production** DAI, not the JARVIS DAI. The two instances use
+  **different auth schemes**. Do not share a client, a token cache, or a base URL between them.
+
+#### 2.3.6 Proven SenseTalk rules (two bugs, both resolved)
+
+- **S1.** Scripts living in `Scripts/TestCases/` must be referenced as `TestCases/<name>` — **no
+  `.script` extension** and **no `Scripts/` prefix**. EPF does not auto-search subfolders.
+- **S2.** Dynamic invocation is plain `run targetScript`. Dot-notation `targetScript.run()` does
+  **not** work.
+
+Both rules constrain the dispatcher template and the target-path derivation logic (see §6.12).
+
+---
+
 ## 3. CONFIRMED ENOVIA INFRASTRUCTURE (single source of truth)
 
 | Thing | Value |
@@ -83,18 +194,41 @@ A web app at `http://eggptdai10.cos.is.keysight.com:8080/` (SSO-gated):
 | DAI log-by-runid API | **(User)-provided, PoC-2-proven.** `GET {DAI_BASE_URL}/ai/runlogs/{runid}` with `Authorization: Bearer <token>` (token via OAuth2 `client_credentials` against `{DAI_BASE_URL}/auth/realms/eggplant/protocol/openid-connect/token`). Response shape: `{"items": [LogEntry…], "total_count": N, "date_as_of": "ISO8601"}`. `LogEntry` keys: `id, eventtime, testrunid, message, severity, step_id, stage, message_type, image_name, image_id`. |
 | Error-entry identification | **LLM step (`claude-opus-4-7`).** Given the ordered `items[]` and the ticket's `title`+`description`, the LLM picks the SINGLE entry whose `message` matches the user-reported failure (e.g. ticket says *"release was not able to identify"* → log entry `"Unable to Find Image (TEXT:\"Released\"). Text not found."`). Severity alone is not a reliable filter — real failures often have `severity: INFORMATIONAL` and `message_type: imagefound`. |
 | Error-screenshot fetch | **Deterministic walk-back** from the matched-entry index toward 0; return the first entry whose `image_id` is non-null/non-empty. Then `GET {DAI_BASE_URL}/api/v2/screenshots/{image_id}` with the same bearer token → PNG bytes. |
-| Practice Bitbucket repo | **(User) provides URL** — separate repo whose `/practice` branch feeds validation runs |
-| Practice branch | `/practice` (the Practice Test Config's git connection is pre-wired to it) |
-| Practice DAI server | **(User) provides URL + API access** — hosts the Practice Test Config, pre-connected to a SUT |
-| Practice Test Config | **(User) provides config ID + the already-tested trigger API** (+ status/poll API) |
+| **Production DAI** (evidence source) | `epcorpappsdai12`, DAI **25.3.1+0**. **READ-ONLY.** Ticket runid → run log → error screenshot. Validation never touches it. |
+| **JARVIS DAI** (execution) | DAI **26.2.2**, dedicated VM, Jay-administered. Executes every validation run. Host observed as `eggptdai10.cos.is.keysight.com:8000` — see the ⚠ CONFIRM below. |
+| **Production repo** (PR target) | `bitbucket.it.keysight.com/scm/eggauto/enovia-plm-test-automation.git`, project `EGGAUTO`, branch `Testing_Mar10`. Working-copy source. Written **only** as `Jarvis-fix/<TICKET>` + PR, after PASS + human approval. Git remote name: **`origin`**. |
+| **Validation repo** (execution target) | `bitbucket.it.keysight.com/scm/eggauto/agentic-eggplant-automation.git`, branch **`Enovia`**. Force-pushed with the full candidate state on every validation cycle. Git remote name: **`agentic-eggplant-automation`**. |
+| JARVIS agents | `Test26_2_Design` plus a Run environment, **co-located on the JARVIS VM**, with licensed **EPF 26.2.x** |
+| Version policy | DAI / agents / EPF are **lockstep at 26.2.x**. Agent `.ini` access keys are instance-specific (HTTPS, 26.2.1+). Production agents and certificates are **not reusable** on JARVIS. |
+| JARVIS suites folder | `C:\Eggplant_Suites` on the JARVIS VM — a git clone of the validation repo (`JARVIS_ENOVIA_SUITES_PATH_IN_VM`) |
+| Completion signal | Webhooks admin UI is available on JARVIS and Jay is admin. **`poll_backoff` works from day one; webhook is the upgrade path, not a prerequisite** (O1). |
+| Run→commit integrity | **Solved.** The run log records `Using Git commit SHA: '<sha>'`, and the git connection **syncs at run start** (not a cached clone). This makes plan4's UP-24 fully implementable rather than a residual risk. |
+| Imported model | Per-suite model exported from the production DAI and imported into the JARVIS DAI (D2). `Part_Master_Pack_01` / **PartMaster onboarded and proven**; all other suites remain open item **O4**. |
+| JARVIS SUT | `Jay_130`, registered by hostname + RDP credentials. **Already bound to the test configs that will be triggered — no setup required by the Agent.** Additional SUTs are added to test configs by Jay later; see `docs/later-enhancements.md` and `docs/context.md`. |
 | Suites (17+) | 3DDashboard, BoundaryApps, Common, CustomReport, EngineeringCentral, EnoviaCommon, LibraryCentral, M&AFoundational, MACS, MaterialsComplianceCentral, MSFIntegration, PartMaster, Performance, PLMBridge, Search, SupplierCentral, TeamCenter |
 | Golden regression | **TESTAUTOMA-8055** — `EngineeringCentral.suite` test; bug at `CommonEnovia.script:409`, the `and not ImageFound(text:"Name",…)` clause |
+
+> ⚠ **CONFIRM (Jay):** the table now carries **two rows naming `eggptdai10.cos.is.keysight.com`** — the
+> pre-existing *"EPF validation runner VM"* row (`156.140.21.30`, 4 CPU / 16 GB) and the new *"JARVIS
+> DAI"* row (host observed as `eggptdai10.cos.is.keysight.com:8000`). Both are left standing
+> deliberately; the conflict is **not** silently resolved. Please confirm: **(a)** does the JARVIS DAI
+> run on that same VM, or a different one? **(b)** is the *"EPF validation runner VM"* row now obsolete
+> (the local `runscript` inner loop it served is deferred — §2.1)? **(c)** what is the exact JARVIS DAI
+> base URL, scheme (http/https) and port? **(d)** §1 advertises the JARVIS web app at
+> `http://eggptdai10.cos.is.keysight.com:8080/` while plan1 §1.6.3 says
+> `http://aiagent-testmanager.…:8000/` — which host serves the chat app? — placeholder, not a fact.
 
 **Handler-chain reality:** `test → suite handler (e.g. addHeaderOnly) → searchEnovia (CommonEnovia.script) → sub-handlers`. Failure families: `boolean_logic_gap, silent_exception_swallowing, search_rectangle, dpi_cascade, text_label, missing_wait, image_staleness (rare), handler_name_mismatch, config_value_stale, environment_issue, application_bug, test_data`.
 
 ---
 
 ## 4. CANONICAL REPO LAYOUT v2 (built in plan0 §B.1)
+
+> ⚠ **CONFIRM (Jay):** the root directory / repo slug below is still the literal `ai-test-fix-agent`.
+> This is a **real Bitbucket repo slug**; renaming it in the docs without renaming it in Bitbucket would
+> create a false record, so it is deliberately left unrenamed under R1. Is the repo being renamed to
+> `jarvis` in Bitbucket? — placeholder, not a fact. (Same question at plan0 A.0 step 1, plan0 B.1
+> step 1, and the `pyproject.toml` `name =` field in plan0 B.1 step 2.)
 
 ```
 ai-test-fix-agent/
@@ -105,12 +239,14 @@ ai-test-fix-agent/
 │   ├── api/        routes_chat.py routes_runs.py routes_sse.py routes_metrics.py
 │   │               routes_webhooks.py auth_sso.py
 │   ├── chat/       intent.py conversation_store.py
-│   ├── orchestrator/ pipeline.py validation_loop.py practice_gate.py lifecycle.py publisher.py
+│   ├── orchestrator/ pipeline.py validation_loop.py validation_gate.py dispatcher.py
+│   │               lifecycle.py publisher.py
 │   │               revert.py state_store.py queue.py locks.py track_loader.py events.py
 │   ├── agentic/    tool_loop.py tools.py schemas.py            # UP-1, UP-2
 │   ├── integrations/ jira_client.py bitbucket_client.py dai_client.py
-│   │               practice_dai.py epf_runner.py claude_client.py
+│   │               jarvis_dai.py epf_runner.py claude_client.py
 │   ├── analysis/   diagnosis.py fix_generator.py family_router.py context_packer.py
+│   │               templates/ (agent_dispatcher.st.j2)         # D4 — generated dispatcher
 │   │               prompts/ (diagnosis_system.md diagnosis_user.md fix_system.md fix_user.md
 │   │                         family_exemplars/*.md)
 │   ├── static/     sensetalk_parser.py call_graph.py ripgrep_search.py handler_map.py
@@ -123,12 +259,13 @@ ai-test-fix-agent/
 ├── webapp/                              # React + Vite + Tailwind chat app
 │   └── src/ (App.tsx components/ hooks/ api/)
 ├── scripts/
-│   ├── poc_dai.py poc_practice.py poc_bitbucket.py poc_jira.py poc_claude.py poc_static.py poc_runscript.ps1
+│   ├── poc_dai.py poc_jarvis_validation.py poc_bitbucket.py poc_jira.py poc_claude.py poc_static.py poc_runscript.ps1
 │   ├── categorize_tickets.py setup_vm_orchestrator.ps1 setup_vm_runner.ps1 clone_repo.ps1
 │   ├── build_handler_map.py build_vocabulary.py run_validation.py run_eval.py
 │   ├── test_integrations.py verify_context.py
 ├── tracks/enovia/
 │   ├── context.md handler_map.yaml handler_vocabulary.json prompt_overrides.md
+│   ├── test_config_registry.yaml        # D3 — suite → test_config_id (replaces the old scalar env var)
 │   ├── validation_tickets.json ticket_base_rate.json poc_results.md
 │   └── gold_scripts/                    # UP-12 exemplar tests
 ├── data/                                # gitignored
@@ -137,7 +274,22 @@ ai-test-fix-agent/
 ```
 
 ### 4.1 Where the fix physically happens (no online IDE / sandbox service needed)
-The orchestrator VM **is** the workspace. A **local git clone of the Enovia test repo** lives at `settings.working_copy_path` with **two remotes**: `origin` = the production repo (pull `Testing_Mar10` hourly; push only `ai-fix/<TICKET>` at plan3 PR time) and `practice` = the Practice repo (push target for validation). All reading/analysis (parser, ripgrep, Claude's `read_script`/`grep_repo` tools) and all writing (the fix applier's exact text replacement) happen on this clone's files, isolated on a local branch `wc/<TICKET>`. Git is the sandbox: the branch isolates the change, `git diff` is the reviewable patch (streamed to the chat as a diff artifact, so the user sees exactly what changed and where), `git reset --hard` restores a pristine tree between attempts. The fix exists remotely only twice: on `practice/practice` during validation, and on `origin ai-fix/<TICKET>` after approval. The trajectory log + transcript keep the permanent record after `wc/` cleanup.
+The orchestrator VM **is** the workspace. A **local git clone of the Enovia test repo** lives at `settings.working_copy_path` with **two remotes pointing at two different Bitbucket repositories**:
+
+- **`origin`** = the **production** Enovia repo `enovia-plm-test-automation` — pull `Testing_Mar10` hourly; push **only** `Jarvis-fix/<TICKET>` at plan3 PR time, after PASS + approval.
+- **`agentic-eggplant-automation`** = the **validation** repo `agentic-eggplant-automation` — force-push the full candidate state to branch `Enovia` on every validation cycle (§2.3).
+
+All reading/analysis (parser, ripgrep, Claude's `read_script`/`grep_repo` tools) and all writing (the fix applier's exact text replacement) happen on this clone's files, isolated on a local branch `wc/<TICKET>`. Git is the sandbox: the branch isolates the change, `git diff` is the reviewable patch (streamed to the chat as a diff artifact, so the user sees exactly what changed and where), `git reset --hard` restores a pristine tree between attempts. **The fix exists remotely exactly twice: on `agentic-eggplant-automation/Enovia` during validation, and on `origin Jarvis-fix/<TICKET>` after approval.** The trajectory log + transcript keep the permanent record after `wc/` cleanup.
+
+**D4 rule (binding).** The generated `<Suite>_AgentDispatcher.script` files exist **only** on `agentic-eggplant-automation/Enovia`. They are validation scaffolding, not product code, and must be **excluded from the `Jarvis-fix/<TICKET>` branch** — the publisher asserts none is present in the diff before pushing (plan3 §3.2). A dispatcher reaching the production repo is a defect.
+
+> ⚠ **CONFIRM (Jay):** the fix branch prefix is written throughout as **`Jarvis-fix/<TICKET>`** (was
+> `ai-fix/<TICKET>`). Should the prefix actually be renamed in the tooling, or does `ai-fix/` remain the
+> operational convention agreed with the track team? The same question covers the Jira label set
+> (`ai-fixed`, `ai-diagnosed`, `ai-diagnosis-only`, `ai-needs-manual`, `ai-budget-stop`, `ai-flake`,
+> `ai-diagnosis-env`, `ai-diagnosis-data`, `ai-diagnosis-infra`, `ai-diagnosis-appbug`,
+> `ai-diagnosis-changescope`, `ai-needs-manual-validation`), which is **left unrenamed** because those
+> are operational identifiers agreed (or to be agreed) with the track team — placeholder, not a fact.
 
 ---
 
@@ -177,14 +329,15 @@ Regex first: `(?i)\b(TESTAUTOMA-\d+)\b` + mode keywords (`diagnose`, `fix`, `sta
 1. **Step template:** Owner → Goal → Actions → Verification → DoD. DoD gates the next step.
 2. **Secrets:** never in repo. `.env` per VM via `pydantic-settings`. `.gitignore` covers `.env`, `data/`, `*.log`, `node_modules/`, `webapp/dist/`.
 3. **Logging:** `structlog` JSON from line one; every external call logs latency + status; every log line carries `run_id`.
-4. **Safety invariants (enforced in code):** never merge; never write `Testing_Mar10`; **validation pushes go ONLY to the Practice repo's `/practice` branch**; the production repo is written only as `ai-fix/<TICKET>` after PASS + approval; production writes require SSO session; SUT serialized via per-track lock; budget cap aborts gracefully (UP-13).
+4. **Safety invariants (enforced in code):** never merge; never write `Testing_Mar10`; **validation pushes go ONLY to the validation repo `agentic-eggplant-automation` on branch `Enovia`**; the production repo is written only as `Jarvis-fix/<TICKET>` after PASS + approval; production writes require SSO session; SUT serialized via per-track lock; budget cap aborts gracefully (UP-13). **Plus:** (a) **no PASS/FAIL is trusted unless the pushed SHA is asserted both before trigger (`git ls-remote`) and after completion (the run log's `Using Git commit SHA`)** — a mismatch yields `STALE_SYNC`, never a verdict (UP-24, §2.3.4, plan2 §2.5.2, plan4 §4.7.2); (b) **the generated dispatcher never reaches the production repo** (D4, §4.1, plan3 §3.2).
 5. **Untrusted input (UP-14):** ticket text AND DAI logs are data, not instructions — delimit, strip active markdown, length-cap; instruct the model accordingly.
 6. **Cost honesty:** track tokens/cost per call; with Opus 4.7 + prompt caching expect **$2–6/ticket**; report it.
 7. **One reasoning model:** `llm.model = claude-opus-4-7` for every diagnosis/fix/agentic call — no quality compromise, no escalation ladder. (The originally planned `claude-opus-4-6` is not whitelisted on the Keysight AI gateway; a request for 4-6 returns a misleading `401 invalid x-api-key` because the gateway forwards the model name and Anthropic upstream rejects it. The whitelisted Opus IDs proven in PoC 2 are `claude-opus-4-5` and `claude-opus-4-7`; we use 4-7 as the newer of the two. If/when Keysight whitelists 4-8 or later, bump this convention.) `llm.model_light` is **optional** and used ONLY for non-reasoning utility calls (chat-intent fallback, one-time vocabulary purpose lines); if the user prefers strict single-model, set it to the same Opus ID or rely on the regex layer alone. `llm.anthropic_base_url` supports the direct API **or** the Keysight gateway (e.g. the Azure APIM Anthropic endpoint) — both model ID and base URL live in `.env`.
-10. **`.env` overrides parent shell:** every script (PoC and prod) loads dotenv with `load_dotenv(override=True)` so the project's `.env` wins over any parent-process env vars. Without this, a developer running scripts from a shell that already has `ANTHROPIC_BASE_URL` set (e.g. an IDE / Claude Code session) will silently hit the wrong API base. Discovered the hard way during PoC 2.
+10. **`.env` overrides parent shell:** every script (PoC and prod) loads dotenv with `load_dotenv(override=True)` so the project's `.env` wins over any parent-process env vars. Without this, a developer running scripts from a shell that already has `ANTHROPIC_BASE_URL` set (e.g. an IDE / Agent session) will silently hit the wrong API base. Discovered the hard way during PoC 2.
 8. **Concurrency truth:** one SUT, one test at a time (`max-parallel: 1`); one dedicated EPF license; one dedicated RDP SUT.
 9. **Prompt caching (UP-6):** stable prefix (system + context.md + vocabulary) marked cacheable on every Claude call.
-11. **No LLM in wait paths:** any long-running external wait (Practice DAI run: 20 min–2 hr; local runscript license wait; any future SUT job) is waited on by plain orchestrator code — an `asyncio.Event` resolved by a webhook, an awaited subprocess, or an `asyncio.sleep` poll loop — never by the LLM/agentic tool-loop (UP-1) calling a "check status" tool repeatedly. Claude touches a validation gate only at its two edges: generating the candidate before triggering, and interpreting PASS/FAIL/logs after it resolves. See plan2 Phase 2.5 for the concrete `PRACTICE_COMPLETION_MODE` design (webhook preferred, `eggplant-runner` CLI or backoff-polling as fallbacks).
+11. **No LLM in wait paths:** any long-running external wait (JARVIS DAI validation run: 20 min–2 hr; any future SUT job) is waited on by plain orchestrator code — an `asyncio.Event` resolved by a webhook, an awaited subprocess, or an `asyncio.sleep` poll loop — never by the LLM/agentic tool-loop (UP-1) calling a "check status" tool repeatedly. Claude touches a validation gate only at its two edges: generating the candidate before triggering, and interpreting PASS/FAIL/logs after it resolves. See **plan2 §2.5** for the concrete `JARVIS_COMPLETION_MODE` design (`poll_backoff` is the day-one mode; webhook is the registered upgrade path, O1). Cost during the wait window must be **$0**.
+12. **SenseTalk path + invocation rules (S1/S2, §2.3.6):** a script under `Scripts/TestCases/` is referenced as `TestCases/<name>` — **never** with a `.script` extension, **never** with a `Scripts/` prefix (EPF does not auto-search subfolders); dynamic invocation is plain `run targetScript`, **never** dot-notation `targetScript.run()`. Both rules are load-bearing for the dispatcher template and the target-path derivation logic — violating either produces a run that fails for the wrong reason.
 
 ---
 
@@ -192,13 +345,13 @@ Regex first: `(?i)\b(TESTAUTOMA-\d+)\b` + mode keywords (`diagnose`, `fix`, `sta
 
 | Gate | After | Bar |
 |---|---|---|
-| **0a** | Week-0 PoCs | PoC 7 (base rate) must pass, **and at least one validation mechanism** (PoC 1/1b local runscript **or** PoC 2b Practice path) must be proven, or STOP & re-architect that part |
+| **0a** | Week-0 PoCs | PoC 7 (base rate) must pass, **and the JARVIS validation path** (PoC 2b JARVIS validation path + A.2b dispatcher proof) must be proven — **both are proven** — or STOP & re-architect that part. JARVIS is now the single mandated validation mechanism; the old either/or with the local `runscript` loop no longer applies (that loop is deferred, §2.1). |
 | **0b** | Foundation | Integration smoke test all-green from the orchestrator VM |
 | **1** | Diagnosis | Root-cause match ≥75% on ≥50 tickets (+95% CI); 0 crashes; chat MVP usable |
 | **2** | Auto-fix | First-attempt ≥60%, final(≤3) ≥80%, equivalence ≥75%, 0 regressions (+CIs) |
 | **3** | Rollout | ≥50% triggered tickets → merged PR ≤24h; PR-accept ≥75%; 0 post-merge regressions |
 
 ## 8. DEFINITION OF DONE (WHOLE PROJECT)
-A developer opens the SSO chat app, types `fix TESTAUTOMA-XXXX`, watches the agent extract the runid → fetch the DAI error log + screenshot → localize → diagnose → patch → lint → validate (local runscript inner loop and/or the Practice-DAI gate) → request approval → push `ai-fix/<TICKET>` + open PR + update Jira with evidence — all live in chat — with one-click revert available, every trajectory logged, and Gate 3 metrics met with CIs and zero post-merge regressions.
+A developer opens the SSO chat app, types `fix TESTAUTOMA-XXXX`, watches JARVIS extract the runid → fetch the **production** DAI error log + screenshot → localize → diagnose → patch → lint → **validate on JARVIS** (force-push the candidate to `agentic-eggplant-automation@Enovia`, assert the SHA, trigger that suite's test config on the JARVIS DAI, assert the executed commit SHA) → request approval → push `Jarvis-fix/<TICKET>` to the **production** repo `enovia-plm-test-automation` + open PR into `Testing_Mar10` + update Jira with evidence — all live in chat — with one-click revert available, every trajectory logged, and Gate 3 metrics met with CIs and zero post-merge regressions. **Two repos, one direction: candidate → validation repo → (PASS + approval) → production repo.**
 
-➡ **Claude Code: open `plan0_poc_and_foundation.md` and begin at Phase 0.A, Step A.0.**
+➡ **Agent: open `plan0_poc_and_foundation.md` and begin at Phase 0.A, Step A.0.**
