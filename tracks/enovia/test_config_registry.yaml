@@ -1,0 +1,19 @@
+# D3 — suite -> JARVIS DAI test config.  plan_master §2.3 · plan0 B.4b.
+# One entry per ONBOARDED suite.  A suite absent from this file is NOT validatable — see the
+# safety rule in plan_master §6 and plan2 §2.5.2.  Adding a suite is a DATA change, never a
+# code change.  Populated by (User) Jay at onboarding; read at runtime by the validation gate.
+#
+# Every push regenerates the dispatcher for EVERY suite listed here (F8 / decision O6), so the
+# Enovia branch is always complete.  A suite with no `smoke_target` is therefore a HARD ERROR at
+# onboarding time — never a silent failure at validation time.
+version: 1
+
+suites:
+  PartMaster:
+    suite_dir: PartMaster.suite                              # exact directory name in the validation repo
+    model: Part_Master_Pack_01                               # JARVIS DAI model the config is built on
+    test_config_id: 0310ac5d-c0c5-49dc-8b04-44c42a33d84e     # triggered by ID via the DAI API
+    dispatcher_script: PartMaster_AgentDispatcher.script     # generated every push — never in the production repo
+    smoke_target: TestCases/TESTAUTOMA_6167_VerifyDownloadTemplateOptionFromPartMasterWidget
+    onboarded: 2026-07-28
+    status: proven                                           # A.2 + A.2b, full PASSED run with SHA traceable

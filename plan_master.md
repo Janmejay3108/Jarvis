@@ -20,7 +20,7 @@
 
 ## 1. END STATE (DEFINITION OF THE PRODUCT)
 
-A web app at `http://eggptdai10.cos.is.keysight.com:8080/` (SSO-gated):
+A web app at `http://eggptdai10.cos.is.keysight.com:8080/` (SSO-gated) — **JARVIS is deployed on `eggptdai10`, co-located with the JARVIS DAI** (§3). Co-location is deliberate: the DAI, the Design and Run agents, EPF, `C:\Eggplant_Suites` and the Enovia working copy all live on that VM, so co-locating the orchestrator shortens every hop that matters. **Port 8080 is the target and must be confirmed free at deploy time** — the JARVIS DAI holds **8000** on the same host.
 
 - **Chat interface.** The user types `fix TESTAUTOMA-8055`, `diagnose TESTAUTOMA-9123`, or just pastes a ticket ID , uses may or may not provide some additional inputs which may be helpful for solving the tickets . An intent parser maps the message to a pipeline mode.
 - **Live progress.** The agent streams its work into the chat as messages and collapsible cards (steps, tool calls, diffs, screenshots, logs) over SSE.
@@ -75,10 +75,11 @@ A web app at `http://eggptdai10.cos.is.keysight.com:8080/` (SSO-gated):
 - **C1.** DAI public API **v2 has no test-config or step create/edit endpoints.** A test config's steps
   cannot be rewritten per ticket via API. **This is the constraint that forced the dispatcher (D1).**
 - **C2.** Suite names must be **globally unique across a DAI instance.**
-- **C3.** ⚠ **CONFIRM (Jay):** C3 is referenced by open item **O2** (suite-name collision behaviour as
-  suites accumulate) and by the "C1–C4" range, but its exact statement was not supplied — placeholder,
-  not a fact. Provide the constraint text, or confirm that O2's collision behaviour *is* C3 and that
-  the range should read C1–C2, C4.
+- **C3.** A DAI **git connection binds one repository to exactly one branch**; the same repository
+  **cannot be connected on two branches within one DAI instance.** *This is why validation force-pushes
+  a single permanent branch (`Enovia`) rather than a branch per ticket* — a per-ticket branch would need
+  a per-ticket git connection, which the instance cannot hold. Together with **C1**, C3 is the reason
+  the whole design is "static config + dispatcher + one disposable branch".
 - **C4.** Model exports restore internal structure but **not** suite links or test configs — those are
   re-authored after import.
 
@@ -103,6 +104,13 @@ A web app at `http://eggptdai10.cos.is.keysight.com:8080/` (SSO-gated):
   from a template on every validation cycle**. It **never exists in the production repo** and must
   **never** appear in a `Jarvis-fix/<TICKET>` branch or PR. Every validation push carries freshly
   generated dispatchers.
+  **Regeneration rule (settled — this is a rule, not a recommendation).** Every registered suite has
+  its **own** `<Suite>_AgentDispatcher.script` **and its own test config**, which executes that suite's
+  dispatcher. On **every** validation push, JARVIS regenerates the dispatcher for **every suite in the
+  D3 registry**, so the `Enovia` branch is **always complete**. This is what makes the force-push safe:
+  the push replaces the branch contents wholesale, so any dispatcher not regenerated would simply
+  vanish. Consequence: a registered suite with no `smoke_target` is a **hard error at onboarding time**,
+  never a silent failure at validation time — the non-target suites still need a valid target line.
 - **D5 — Target reference form.** The dispatcher's target is written using the proven SenseTalk path
   rules in §2.3.6 (S1/S2).
 
@@ -110,18 +118,30 @@ A web app at `http://eggptdai10.cos.is.keysight.com:8080/` (SSO-gated):
 
 Template location: `src/analysis/templates/agent_dispatcher.st.j2`.
 
+This is the **proven** form — the script whose log lines exist in a real JARVIS run log. It is
+authoritative over any earlier draft:
+
 ```
 -- {{suite}}_AgentDispatcher.script
 -- JARVIS — dispatcher for {{suite}}.suite (GENERATED — do not hand-edit)
--- Contract: only the targetScript line is rewritten per validation cycle.
+-- Contract: only the targetScript line below is rewritten per validation cycle.
+-- Value = path relative to Scripts/, forward slashes, no .script extension.
 -- No try/catch — a target failure MUST fail this run.
-
-set targetScript to "{{target_rel_path}}"   -- e.g. TestCases/TESTAUTOMA_6167_Verify...
-
-log "start — target=" & targetScript
+set targetScript to "{{target_rel_path}}"
+log "AgentDispatcher: start — target=" & targetScript
 run targetScript
-log "done — target=" & targetScript
+log "AgentDispatcher: done — target=" & targetScript
 ```
+
+Three details are load-bearing:
+
+1. **The log lines carry the `AgentDispatcher:` prefix.** A.2b's verification and the gate's log parsing
+   both key off these markers. **Assert on the `AgentDispatcher:` prefix only, never on the full line** —
+   the em dash is non-ASCII, and log encoding must not be able to break a verdict.
+2. **The `Value = path relative to Scripts/…` comment stays.** It states rule **S1** at the point of use,
+   where an implementer will actually read it.
+3. **The header says JARVIS.** Any live copy predating the rename shows the old project name; the
+   generator emits the corrected header from now on.
 
 The absence of `try/catch` is **deliberate and load-bearing**: a swallowed target failure would produce
 a false PASS, which is the worst possible failure mode for this system.
@@ -183,8 +203,8 @@ Both rules constrain the dispatcher template and the target-path derivation logi
 | Project key / slug | `EGGAUTO` / `enovia-plm-test-automation` |
 | Default/working branch | `Testing_Mar10` |
 | DAI git connection name | `Enovia PLM` |
-| Orchestrator VM | `aiagent-testmanager.cos.is.keysight.com` (156.140.21.109) — 4 CPU / 32 GB |
-| EPF validation runner VM | `eggptdai10.cos.is.keysight.com` (156.140.21.30) — 4 CPU / 16 GB |
+| **The JARVIS VM (one machine, all roles)** | **`eggptdai10.cos.is.keysight.com` (156.140.21.30)** — 4 CPU / 16 GB. Hosts, together: **JARVIS DAI 26.2.2** at `https://eggptdai10.cos.is.keysight.com:8000/` · the **co-located Design + Run agents** (`Test26_2_Design` + a Run environment) · **EPF 26.2.x** · **`C:\Eggplant_Suites`** (git clone of the validation repo) · the **Enovia working copy** · and the **JARVIS orchestrator + chat app at `:8080`**. The former *"EPF validation runner"* role is **deferred with the local `runscript` inner loop** (§2.1) — the role is deferred, the **machine is not obsolete**. SUTs stay on their own VMs and are connected at execution time. |
+| Orchestrator VM (superseded) | `aiagent-testmanager.cos.is.keysight.com` (156.140.21.109) — 4 CPU / 32 GB. **Previously designated orchestrator host; superseded by the `eggptdai10` co-location decision above. Retained** — the hostname belongs to a real, separate org-level initiative and is protected under R1. |
 | Agent-VM suite cache | `C:\ProgramData\Eggplant\Agent\suites\{Env}\.run\enovia-plm-test-automation\Enovia\` |
 | DAI Environments | `EnoviaExecEnv_92_1/2/3` |
 | SUT connection type | **RDP** (one test at a time; one dedicated EPF floating license) |
@@ -195,7 +215,7 @@ Both rules constrain the dispatcher template and the target-path derivation logi
 | Error-entry identification | **LLM step (`claude-opus-4-7`).** Given the ordered `items[]` and the ticket's `title`+`description`, the LLM picks the SINGLE entry whose `message` matches the user-reported failure (e.g. ticket says *"release was not able to identify"* → log entry `"Unable to Find Image (TEXT:\"Released\"). Text not found."`). Severity alone is not a reliable filter — real failures often have `severity: INFORMATIONAL` and `message_type: imagefound`. |
 | Error-screenshot fetch | **Deterministic walk-back** from the matched-entry index toward 0; return the first entry whose `image_id` is non-null/non-empty. Then `GET {DAI_BASE_URL}/api/v2/screenshots/{image_id}` with the same bearer token → PNG bytes. |
 | **Production DAI** (evidence source) | `epcorpappsdai12`, DAI **25.3.1+0**. **READ-ONLY.** Ticket runid → run log → error screenshot. Validation never touches it. |
-| **JARVIS DAI** (execution) | DAI **26.2.2**, dedicated VM, Jay-administered. Executes every validation run. Host observed as `eggptdai10.cos.is.keysight.com:8000` — see the ⚠ CONFIRM below. |
+| **JARVIS DAI** (execution) | DAI **26.2.2**, Jay-administered, on the JARVIS VM above. **Base URL: `https://eggptdai10.cos.is.keysight.com:8000/` — HTTPS, port 8000.** Executes every validation run. |
 | **Production repo** (PR target) | `bitbucket.it.keysight.com/scm/eggauto/enovia-plm-test-automation.git`, project `EGGAUTO`, branch `Testing_Mar10`. Working-copy source. Written **only** as `Jarvis-fix/<TICKET>` + PR, after PASS + human approval. Git remote name: **`origin`**. |
 | **Validation repo** (execution target) | `bitbucket.it.keysight.com/scm/eggauto/agentic-eggplant-automation.git`, branch **`Enovia`**. Force-pushed with the full candidate state on every validation cycle. Git remote name: **`agentic-eggplant-automation`**. |
 | JARVIS agents | `Test26_2_Design` plus a Run environment, **co-located on the JARVIS VM**, with licensed **EPF 26.2.x** |
@@ -208,15 +228,8 @@ Both rules constrain the dispatcher template and the target-path derivation logi
 | Suites (17+) | 3DDashboard, BoundaryApps, Common, CustomReport, EngineeringCentral, EnoviaCommon, LibraryCentral, M&AFoundational, MACS, MaterialsComplianceCentral, MSFIntegration, PartMaster, Performance, PLMBridge, Search, SupplierCentral, TeamCenter |
 | Golden regression | **TESTAUTOMA-8055** — `EngineeringCentral.suite` test; bug at `CommonEnovia.script:409`, the `and not ImageFound(text:"Name",…)` clause |
 
-> ⚠ **CONFIRM (Jay):** the table now carries **two rows naming `eggptdai10.cos.is.keysight.com`** — the
-> pre-existing *"EPF validation runner VM"* row (`156.140.21.30`, 4 CPU / 16 GB) and the new *"JARVIS
-> DAI"* row (host observed as `eggptdai10.cos.is.keysight.com:8000`). Both are left standing
-> deliberately; the conflict is **not** silently resolved. Please confirm: **(a)** does the JARVIS DAI
-> run on that same VM, or a different one? **(b)** is the *"EPF validation runner VM"* row now obsolete
-> (the local `runscript` inner loop it served is deferred — §2.1)? **(c)** what is the exact JARVIS DAI
-> base URL, scheme (http/https) and port? **(d)** §1 advertises the JARVIS web app at
-> `http://eggptdai10.cos.is.keysight.com:8080/` while plan1 §1.6.3 says
-> `http://aiagent-testmanager.…:8000/` — which host serves the chat app? — placeholder, not a fact.
+> **Port map on the JARVIS VM:** `:8000` = JARVIS DAI (HTTPS) · `:8080` = the JARVIS orchestrator +
+> chat app (target port — **confirm free at deploy time**). Two services, one host, distinct ports.
 
 **Handler-chain reality:** `test → suite handler (e.g. addHeaderOnly) → searchEnovia (CommonEnovia.script) → sub-handlers`. Failure families: `boolean_logic_gap, silent_exception_swallowing, search_rectangle, dpi_cascade, text_label, missing_wait, image_staleness (rare), handler_name_mismatch, config_value_stale, environment_issue, application_bug, test_data`.
 
@@ -224,15 +237,18 @@ Both rules constrain the dispatcher template and the target-path derivation logi
 
 ## 4. CANONICAL REPO LAYOUT v2 (built in plan0 §B.1)
 
-> ⚠ **CONFIRM (Jay):** the root directory / repo slug below is still the literal `ai-test-fix-agent`.
-> This is a **real Bitbucket repo slug**; renaming it in the docs without renaming it in Bitbucket would
-> create a false record, so it is deliberately left unrenamed under R1. Is the repo being renamed to
-> `jarvis` in Bitbucket? — placeholder, not a fact. (Same question at plan0 A.0 step 1, plan0 B.1
-> step 1, and the `pyproject.toml` `name =` field in plan0 B.1 step 2.)
+> **The repo root IS the project root.** The Bitbucket repo is named **`jarvis`**, so cloning it
+> produces exactly this tree — there is no nested project directory. (The project's former slug is
+> retired: as a repo name, as a directory name, and as the `pyproject.toml` package name.)
+> `agentic-eggplant-automation` is a **different** repo — the validation repo — and is **not** renamed.
 
 ```
-ai-test-fix-agent/
-├── pyproject.toml  .env.example  README.md  PROGRESS.md
+jarvis/                                  # git repo root == project root == Bitbucket repo `jarvis`
+├── plan_master.md  plan0…plan4.md       # the plan set lives at root; it is the entry point
+├── pyproject.toml  .env.example  README.md  PROGRESS.md  .gitignore  requirements-poc.txt
+├── docs/                                # context.md maintenance.md later-enhancements.md
+│                                        # plan_change_log_jarvis.md plan_change_log_jarvis_2.md
+│                                        # poc_execution_guide.md
 ├── config/enovia.yaml                  # track config (repo, suites, DAI ids, models, modes, budgets)
 ├── src/
 │   ├── main.py  config.py
@@ -270,6 +286,7 @@ ai-test-fix-agent/
 │   └── gold_scripts/                    # UP-12 exemplar tests
 ├── data/                                # gitignored
 │   ├── working_copy/ agent_runs/{run_id}/ trajectories/enovia.jsonl agent.db
+├── samples/
 └── tests/
 ```
 
@@ -283,13 +300,21 @@ All reading/analysis (parser, ripgrep, Claude's `read_script`/`grep_repo` tools)
 
 **D4 rule (binding).** The generated `<Suite>_AgentDispatcher.script` files exist **only** on `agentic-eggplant-automation/Enovia`. They are validation scaffolding, not product code, and must be **excluded from the `Jarvis-fix/<TICKET>` branch** — the publisher asserts none is present in the diff before pushing (plan3 §3.2). A dispatcher reaching the production repo is a defect.
 
-> ⚠ **CONFIRM (Jay):** the fix branch prefix is written throughout as **`Jarvis-fix/<TICKET>`** (was
-> `ai-fix/<TICKET>`). Should the prefix actually be renamed in the tooling, or does `ai-fix/` remain the
-> operational convention agreed with the track team? The same question covers the Jira label set
-> (`ai-fixed`, `ai-diagnosed`, `ai-diagnosis-only`, `ai-needs-manual`, `ai-budget-stop`, `ai-flake`,
-> `ai-diagnosis-env`, `ai-diagnosis-data`, `ai-diagnosis-infra`, `ai-diagnosis-appbug`,
-> `ai-diagnosis-changescope`, `ai-needs-manual-validation`), which is **left unrenamed** because those
-> are operational identifiers agreed (or to be agreed) with the track team — placeholder, not a fact.
+**Settled naming:** the fix branch prefix is **`Jarvis-fix/<TICKET>`**, that exact casing. The 12 `ai-*`
+Jira labels (`ai-fixed`, `ai-diagnosed`, `ai-diagnosis-only`, `ai-needs-manual`, `ai-budget-stop`,
+`ai-flake`, `ai-diagnosis-env`, `ai-diagnosis-data`, `ai-diagnosis-infra`, `ai-diagnosis-appbug`,
+`ai-diagnosis-changescope`, `ai-needs-manual-validation`) are **unchanged and stay exactly as they are** —
+they are operational identifiers agreed with the track team.
+
+> **Two clones, two remotes both called `origin` — do not confuse them.**
+> - The **JARVIS project repo** (this repo, the agent's own code): its `origin` is Bitbucket **`jarvis`**.
+> - The **Enovia working copy** (`settings.working_copy_path`, the test scripts being fixed): its
+>   `origin` is **`enovia-plm-test-automation`**, and its second remote is
+>   **`agentic-eggplant-automation`** (the validation repo).
+>
+> Every `origin` mentioned in a *validation* or *publishing* context means the **Enovia working copy's**
+> origin — the production test repo. Agent code is never pushed to the test repo, and test fixes are
+> never pushed to the JARVIS repo.
 
 ---
 
@@ -338,6 +363,7 @@ Regex first: `(?i)\b(TESTAUTOMA-\d+)\b` + mode keywords (`diagnose`, `fix`, `sta
 9. **Prompt caching (UP-6):** stable prefix (system + context.md + vocabulary) marked cacheable on every Claude call.
 11. **No LLM in wait paths:** any long-running external wait (JARVIS DAI validation run: 20 min–2 hr; any future SUT job) is waited on by plain orchestrator code — an `asyncio.Event` resolved by a webhook, an awaited subprocess, or an `asyncio.sleep` poll loop — never by the LLM/agentic tool-loop (UP-1) calling a "check status" tool repeatedly. Claude touches a validation gate only at its two edges: generating the candidate before triggering, and interpreting PASS/FAIL/logs after it resolves. See **plan2 Phase 2.5** for the concrete `JARVIS_COMPLETION_MODE` design (`poll_backoff` is the day-one mode; webhook is the registered upgrade path, O1). Cost during the wait window must be **$0**.
 12. **SenseTalk path + invocation rules (S1/S2, §2.3.6):** a script under `Scripts/TestCases/` is referenced as `TestCases/<name>` — **never** with a `.script` extension, **never** with a `Scripts/` prefix (EPF does not auto-search subfolders); dynamic invocation is plain `run targetScript`, **never** dot-notation `targetScript.run()`. Both rules are load-bearing for the dispatcher template and the target-path derivation logic — violating either produces a run that fails for the wrong reason.
+13. **Suite not onboarded → never validate.** If `suite_of(<changed file>)` yields a suite that is **not** present in `tracks/enovia/test_config_registry.yaml` (D3), the validation gate returns **`{status: NOT_ONBOARDED}` *before* any push or trigger**. The run is routed to the existing **diagnose-only** outcome with reason `suite_not_onboarded`, using the existing `ai-diagnosis-only` label. The gate **never** falls back to another suite's `test_config_id`, and `NOT_ONBOARDED` is **never** reported as PASS or FAIL. This is a routing decision taken *before* a run starts, not a run-time failure. Only one suite is onboarded today (**O4** tracks the rest), so this rule is load-bearing from day one. See plan2 §2.5.2 and §2.6.
 
 ---
 
