@@ -1,15 +1,15 @@
-# PLAN 1 — DIAGNOSIS ENGINE + CHAT MVP (WEEKS 3–4) — v2 FOR CLAUDE CODE
+# PLAN 1 — DIAGNOSIS ENGINE + CHAT MVP (WEEKS 3–4) — v2 FOR THE AGENT
 
-> **Prereq:** GATE 0b passed. **Objective:** a working agent that takes an Enovia Jira ticket ID **from a chat interface**, localizes the script + handler chain deterministically, reads DAI logs/screenshots, produces a structured diagnosis via an **agentic tool loop**, posts it to Jira, and streams every step into the chat live. **No code changes this phase** — pure analysis; the zero-risk trust-builder. Gate 1 is the statistically honest accuracy bar.
+> **Prereq:** GATE 0b passed. **Objective:** **JARVIS (Automation Testing Agent)** takes an Enovia Jira ticket ID **from a chat interface**, localizes the script + handler chain deterministically, reads **production** DAI logs/screenshots, produces a structured diagnosis via an **agentic tool loop**, posts it to Jira, and streams every step into the chat live. **No code changes this phase** — pure analysis; the zero-risk trust-builder. Gate 1 is the statistically honest accuracy bar.
 >
 > Build order: 1.1 orchestrator → 1.2 clients → 1.3 static wiring → 1.4 diagnosis engine → 1.5 chat backend → 1.6 chat frontend → 1.7 eval + validation. Each step compiles and is unit-tested before the next.
 
 ---
 
-## Phase 1.1 — Orchestrator core: run model, pipeline, queue, locks — *Owner: Claude Code*
+## Phase 1.1 — Orchestrator core: run model, pipeline, queue, locks — *Owner: Agent*
 
 ### Step 1.1.1 — Run + step models (`src/models/run.py`)
-Pydantic models. `RunStatus` enum covering the **whole lifecycle now** (later phases reuse it): `queued, reading_ticket, localizing, fetching_logs, analyzing, generating_fix, applying_fix, linting, validating_local, validating_dai, awaiting_approval, publishing, updating_jira, completed, failed, cancelled, low_confidence, exhausted`. `RunStep {name, status, started_at, completed_at?, detail?, error?}`. `AgentRun {run_id (run-YYYYmmdd-HHMMSS-ffffff), ticket_key, track_id="enovia", mode: "diagnose"|"autofix", conversation_id?, status, steps[], ticket_data?, scripts{path:content}, call_chain?, blast_radius{handler:[file:line]}, logs?, screenshots[], diagnosis?, fix?, validation?, tokens_in, tokens_out, cost_usd, created_at, completed_at?}` with `begin(name,status,detail)` / `end(detail?,error?)` helpers that ALSO publish `step.started`/`step.completed`/`step.failed` through the EventBus and persist via the state store.
+Pydantic models. `RunStatus` enum covering the **whole lifecycle now** (later phases reuse it): `queued, reading_ticket, localizing, fetching_logs, analyzing, generating_fix, applying_fix, linting, validating_local, validating_dai, awaiting_approval, publishing, updating_jira, completed, failed, cancelled, low_confidence, exhausted`. **Both validation members are kept** (removing an enum member would be an architecture change): `validating_dai` is **the JARVIS validation gate** (plan2 §2.5) — the mechanism actually used in this version; `validating_local` is **reserved for the deferred local `runscript` inner loop** (plan0 A.3–A.5, plan2 §2.4) and is not reached while `mechanism: jarvis-dai`. `RunStep {name, status, started_at, completed_at?, detail?, error?}`. `AgentRun {run_id (run-YYYYmmdd-HHMMSS-ffffff), ticket_key, track_id="enovia", mode: "diagnose"|"autofix", conversation_id?, status, steps[], ticket_data?, scripts{path:content}, call_chain?, blast_radius{handler:[file:line]}, logs?, screenshots[], diagnosis?, fix?, validation?, tokens_in, tokens_out, cost_usd, created_at, completed_at?}` with `begin(name,status,detail)` / `end(detail?,error?)` helpers that ALSO publish `step.started`/`step.completed`/`step.failed` through the EventBus and persist via the state store.
 **DoD:** model unit tests; begin/end emits events and persists steps.
 
 ### Step 1.1.2 — Diagnosis pipeline (`src/orchestrator/pipeline.py`)
@@ -32,7 +32,7 @@ read_ticket (+ runid) → fetch_logs → localize → analyze → post_diagnosis
 
 ---
 
-## Phase 1.2 — Integration clients — *Owner: Claude Code (live smokes: (User))*
+## Phase 1.2 — Integration clients — *Owner: Agent (live smokes: (User))*
 
 ### Step 1.2.1 — `jira_client.py` (DC REST v2)
 Async httpx, PAT bearer. `get_ticket(key)`, `post_comment(key, body)` (plain/wiki body), `add_label(key, label)` (`update.labels[{add}]`), `add_attachment(key, filename, bytes, mime)` (header `X-Atlassian-Token: no-check`), `transitions(key)`, `transition(key, name)` (best-effort). `tenacity` retry (3x, expo backoff) on 5xx/timeouts.
@@ -41,6 +41,8 @@ Async httpx, PAT bearer. `get_ticket(key)`, `post_comment(key, body)` (plain/wik
 `read_file(path, at)` via `/raw/{path}?at=`, `list_files(path, at)` with `isLastPage/nextPageStart` pagination. Project `EGGAUTO`, slug `enovia-plm-test-automation` from config.
 
 ### Step 1.2.3 — `dai_client.py` (read, runid-first)
+> **This client targets the *production* DAI (`epcorpappsdai12`, DAI 25.3.1+0) — read-only evidence retrieval.** The **JARVIS DAI** client is a **separate** module (`src/integrations/jarvis_dai.py`, plan2 §2.5) targeting a different instance (DAI 26.2.2) with a **different auth scheme** (`POST /api/v2/auth` → ~10-min bearer, versus this client's OAuth2 client-credentials against the Keycloak realm). **Do not merge them**, and do not share a base URL, a client instance or a token cache between them.
+
 Built on the **(User)-provided, PoC-2-proven endpoints**. Auth: OAuth2 `client_credentials` → bearer JWT, cached in-process per token lifetime. Methods:
 - `log_by_runid(runid: str) -> list[LogEntry]` — `GET {DAI_LOG_BY_RUNID_URL}`; parse `{"items": [...], "total_count": N, "date_as_of": ISO}`; return `items[]` as `LogEntry` pydantic models (`id, eventtime, testrunid, message, severity, step_id, stage, message_type, image_name, image_id`).
 - `fetch_screenshot(image_id: str, dest: Path) -> Path` — `GET {DAI_SCREENSHOT_URL}` → write PNG bytes.
@@ -62,7 +64,7 @@ The one place all Anthropic calls go through — **every reasoning call uses `se
 
 ---
 
-## Phase 1.3 — Static retrieval wired in + context packer — *Owner: Claude Code*
+## Phase 1.3 — Static retrieval wired in + context packer — *Owner: Agent*
 
 ### Step 1.3.1 — Wire `handler_map` / `sensetalk_parser` / `call_graph` / `ripgrep_search` (built in plan0 §B.4) into the pipeline; reads come from the **local working copy** (fast) with Bitbucket `read_file` as fallback for paths missing locally.
 ### Step 1.3.2 — `_locate_test` + `_suite_of`: port the JIRA-number→suite ranges from `context.md` (e.g. 2864–2950 → EngineeringCentral, 2975–2996 → Search, …) into `config/enovia.yaml`; resolver returns the `TestCases/...script` repo path.
@@ -73,10 +75,10 @@ Token-budgeted assembly for single-shot mode AND for the tool-loop's initial mes
 
 ---
 
-## Phase 1.4 — Diagnosis engine v2 (agentic) — *Owner: Claude Code*
+## Phase 1.4 — Diagnosis engine v2 (agentic) — *Owner: Agent*
 
 ### Step 1.4.1 — Failure-family router [UP-5] (`src/analysis/family_router.py`)
-`classify(ticket_text, log_text) -> {family, confidence, signals}`. Rule layer first (regexes: `ImageFound(text:` misses → text_label/search_rectangle; `set TextStyle.dpi` → dpi_cascade; `caught … ignored`/empty catch → silent_exception_swallowing; timeout/`waitFor` gaps → missing_wait; …). If no rule fires → one light model call (`model_light` if configured, else Opus with small `max_tokens` — the family hint is advisory, not reasoning-critical): forced-tool output `{family, confidence}`. Output selects `prompts/family_exemplars/<family>.md` (2–3 worked examples each, sourced from `context.md`'s pattern library — Claude Code drafts, **(User)**/track dev reviews).
+`classify(ticket_text, log_text) -> {family, confidence, signals}`. Rule layer first (regexes: `ImageFound(text:` misses → text_label/search_rectangle; `set TextStyle.dpi` → dpi_cascade; `caught … ignored`/empty catch → silent_exception_swallowing; timeout/`waitFor` gaps → missing_wait; …). If no rule fires → one light model call (`model_light` if configured, else Opus with small `max_tokens` — the family hint is advisory, not reasoning-critical): forced-tool output `{family, confidence}`. Output selects `prompts/family_exemplars/<family>.md` (2–3 worked examples each, sourced from `context.md`'s pattern library — the Agent drafts, **(User)**/track dev reviews).
 
 ### Step 1.4.2 — Tool registry + schemas [UP-1, UP-2] (`src/agentic/tools.py`, `schemas.py`)
 Read-only tools exposed to Claude during diagnosis (each: JSON schema, handler, per-run call budget, structlog + `tool.called`/`tool.result` events):
@@ -106,7 +108,7 @@ Read-only tools exposed to Claude during diagnosis (each: JSON schema, handler, 
 
 ---
 
-## Phase 1.5 — Chat backend — *Owner: Claude Code ((User): SSO values)*
+## Phase 1.5 — Chat backend — *Owner: Agent ((User): SSO values)*
 
 ### Step 1.5.1 — SSO (`src/api/auth_sso.py`)
 OIDC via `authlib` against Keysight SSO (or trusted reverse-proxy header mode — config switch). `require_user` dependency on **all** `/api/*`; signed session cookie; login/callback/logout routes. **(User)** provides issuer/client-id/secret/redirect URL (or confirms the proxy-header contract).
@@ -121,7 +123,7 @@ Implement master §5.1 exactly: `POST /api/chat/messages` (persist user msg → 
 
 ---
 
-## Phase 1.6 — Chat frontend MVP (`webapp/`) — *Owner: Claude Code*
+## Phase 1.6 — Chat frontend MVP (`webapp/`) — *Owner: Agent*
 
 ### Step 1.6.1 — Scaffold
 Vite + React + TypeScript + Tailwind. Layout: left sidebar (conversation list + "New chat"), main chat pane, composer. `api/client.ts` (fetch wrapper, credentials included), `hooks/useEventStream.ts` (EventSource wrapper: replay-aware, auto-reconnect, dispatch by `type`).
@@ -141,7 +143,7 @@ Vite + React + TypeScript + Tailwind. Layout: left sidebar (conversation list + 
 
 ---
 
-## Phase 1.7 — Eval harness + historical validation + GATE 1 — *Owner: Claude Code + (User)*
+## Phase 1.7 — Eval harness + historical validation + GATE 1 — *Owner: Agent + (User)*
 
 ### Step 1.7.1 — Eval harness [UP-10] (`src/evals/`, `scripts/run_eval.py`)
 - `wilson.py`: `wilson(k, n, z=1.96) -> (lo, hi)` (standard Wilson score interval) + helper to format `p [lo, hi]`.
@@ -151,8 +153,8 @@ Vite + React + TypeScript + Tailwind. Layout: left sidebar (conversation list + 
 ### Step 1.7.2 — Dataset — *(User)*
 Extend `ticket_base_rate.json` into `validation_tickets.json` (≥50: key, category, `fix_description` = actual file/line/change, complexity). Cover every in-scope family; include TESTAUTOMA-8055 + the 2 "by-eye" control tickets.
 
-### Step 1.7.3 — Run + score — *(User runs; Claude Code analyzes)*
-Run the eval; human-score each diagnosis; feed verdicts back. If below bar: Claude Code clusters failures by category → enrich `context.md` + that family's exemplars; raise chain depth; enable extended thinking on hard cases; rerun **only failing tickets**, then one full clean pass for the record.
+### Step 1.7.3 — Run + score — *(User runs; Agent analyzes)*
+Run the eval; human-score each diagnosis; feed verdicts back. If below bar: the Agent clusters failures by category → enrich `context.md` + that family's exemplars; raise chain depth; enable extended thinking on hard cases; rerun **only failing tickets**, then one full clean pass for the record.
 
 ### GATE 1 (print; (User) confirms with measured values)
 | Metric | Target | Measured |
