@@ -404,7 +404,7 @@ The winget installs, `uv`, the ✓/✗ component table and the reserved EPF lice
 3. Unit tests: schema creation, publish→persist→subscribe ordering, replay (`list_events`) equals live sequence.
 **DoD:** state store + bus tested; a fake run's events fully replayable from the DB.
 
-### Step B.7 — Integration smoke test + GATE 0b — *Owner: Agent + (User)*
+### Step B.7 — Integration smoke test + GATE 0b-LOCAL / GATE 0b-VM — *Owner: Agent + (User)*
 **Goal:** one script exercises every integration — run **locally first (B.7a)**, then **on `eggptdai10` at deployment (B.7b)**. `eggptdai10` is the JARVIS VM that hosts the DAI, the agents, `C:\Eggplant_Suites`, the working copy and the orchestrator itself.
 
 > **Why this step and Gate 0b split (ruled by Jay, 2026-07-29 — open item O12).** As previously written,
