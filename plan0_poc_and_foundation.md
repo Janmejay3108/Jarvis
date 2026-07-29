@@ -353,7 +353,8 @@ The winget installs, `uv`, the ✓/✗ component table and the reserved EPF lice
 **DoD:** `handler_map.yaml` + `handler_vocabulary.json` complete; parser/graph/ripgrep/lint tested; `context.md` reviewed; hourly pull + nightly rebuild + the `C:\Eggplant_Suites` pull all running; both remotes configured (`origin` → `enovia-plm-test-automation`, `agentic-eggplant-automation` → `agentic-eggplant-automation`).
 
 ### Step B.4b — JARVIS suite onboarding + test-config registry — *Owner: (User), scripts and registry schema by Agent*
-**Goal:** bring a suite onto the JARVIS DAI so the validation gate can target it. This is the **D2 sequence** (plan_master §2.3.2) — a one-time, per-suite authoring job. **Every DAI-side action below is performed by the (User), Jay**; the Agent supplies the registry schema, the dispatcher template and the validation scripts.
+**Goal:** bring a suite onto the JARVIS DAI so the validation gate can target it.
+> **What onboarding a suite buys you:** tickets whose **failing tests live in that suite** become validatable. **A suite is not a location for fixes** — a fix frequently lands in a shared handler (`CommonEnovia.script` and friends) that belongs to no suite at all. The validation target is always the **owner of the failing test** (`validation_suite_of`, plan2 §2.5.0). This is the **D2 sequence** (plan_master §2.3.2) — a one-time, per-suite authoring job. **Every DAI-side action below is performed by the (User), Jay**; the Agent supplies the registry schema, the dispatcher template and the validation scripts.
 
 **Actions (the D2 sequence, in order):**
 1. **Export** the suite's model from the **production** DAI.
