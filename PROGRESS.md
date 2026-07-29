@@ -36,18 +36,34 @@ Conclusion: to use claude opus 4.7 for the agent.
 
 ---
 
-## OPEN ITEMS (O1–O7)
+## OPEN ITEMS (O1–O12)
 
 | ID | Status | Open item | Where it bites |
 |---|---|---|---|
-| **O1** | **open** | Webhook profile not yet registered on JARVIS. `poll_backoff` is the day-one completion mode; webhook is the upgrade path, not a prerequisite. | plan0 A.2 · plan2 §2.5.2 · plan4 §4.0 item 3 |
+| **O1** | **open** | Webhook profile not yet registered on JARVIS. `poll_backoff` is the day-one completion mode; webhook is the upgrade path, not a prerequisite. **Nothing anywhere treats a webhook as a prerequisite:** `poll_backoff` is the *proven* day-one mode, and the webhook is a **latency upgrade Jay is testing in parallel** — it blocks nothing. | plan0 A.2 · plan2 §2.5.2 · plan4 §4.0 item 3 |
 | **O2** | **open** | Suite-name collision behaviour as suites accumulate on the JARVIS instance — **constraint C2** (names must be globally unique per DAI instance). *Corrected 2026-07-28: this was previously mis-cited as C3; C3 is the one-repo-one-branch git-connection constraint.* Re-check at every onboarding. | plan0 B.4b · plan3 §3.7 |
 | **O3** | **open** | Per-cycle validation wall-clock timing across a realistic suite set — not yet measured. Measurable only once the gate runs for real. | plan2 GATE 2 "avg fix+validation time" row |
 | **O4** | **open — biggest scaling item** | Scale-out: only `Part_Master_Pack_01` / PartMaster is onboarded. **16 suites remain**, each needing the full D2 onboarding sequence. This is now the single largest constraint on how much of the ticket flow JARVIS can serve. | plan0 B.4b · plan3 §3.7 |
 | **O5** | ⚠️ **MITIGATED** (2026-07-28) | Force-push semantics vs. multi-suite dispatchers: force-pushing the full candidate state onto `Enovia` replaces the branch contents, so dispatchers for non-target suites disappear unless regenerated. **The mechanic still stands — it is neutralised, not removed, by the O6 rule.** Kept visible so nobody re-introduces a partial regeneration. | plan2 §2.5.0 |
 | **O6** | ✅ **RESOLVED** (2026-07-28) | Every registered suite has its **own** `<Suite>_AgentDispatcher.script` **and its own test config**, which executes that suite's dispatcher. On **every** validation push, JARVIS regenerates the dispatcher for **every suite in the registry**, so the `Enovia` branch is always complete. **A rule, not a recommendation.** Consequence: a registered suite with no `smoke_target` is a hard error at onboarding time. | plan_master §2.3.2 D4 · plan2 §2.5.0 |
 | **O7** | **open** | Monthly model re-import from the production DAI into JARVIS is an **undocumented manual activity** and must become a written procedure in `docs/maintenance.md`, performed by Jay every time. **Person-dependency.** | plan3 §3.7 |
+| **O8** | **open** | The **≥50-ticket labelled set** is assembled at **Gate 1 scoring**, drawing on trajectory records accumulated during development — not as a separate pre-development labelling session. *Why 50 and not 12:* at n=12, 9 correct = 75% with a 95% Wilson CI of **[46.8, 91.1]** — an interval containing a coin flip, which cannot support a ≥75% claim to any reviewer. At n=50, 38 correct = 76% with CI **[62.6, 85.7]**. Gate 1 reports a point estimate **and** a CI; the dataset is what makes that number defensible. | plan0 A.10b · plan1 §1.7 GATE 1 |
+| **O9** | **open** | The **end-to-end golden path** can only be demonstrated once the suite **owning TESTAUTOMA-8055's failing test** is onboarded. `plan_master` §3 records that test as living in **`EngineeringCentral.suite`** (the fix lands in the shared handler `CommonEnovia.script:409`, which belongs to no suite). Since PartMaster is the only onboarded suite, **EngineeringCentral is the second onboarding target** unless A.10a's frequency count argues otherwise. ⚠ **CONFIRM (Jay):** confirm EngineeringCentral is the next suite to onboard for O4. | plan0 B.4b · plan0 A.10a · O4 |
+| **O10** | **open** | **EPF licence contention.** If the agent shares a floating pool with human testers, a validation run started when the pool is exhausted fails for reasons unrelated to the candidate fix. Such a failure **must be classified as infrastructure, never as a failed fix** — otherwise licence scarcity is indistinguishable from JARVIS producing bad patches, which is the worst possible misreading of a verdict. | plan2 §2.6 verdict classification · plan4 §4.2 |
+| **O11** | **open** | **Agent identity.** JARVIS acts as **Jay**: PRs are authored as Jay and approved by someone else on the reviewing team, which satisfies the ≥1-approval rule. PR authorship, the audit trail and continuity across **token rotation or personnel change** therefore all depend on one person's credentials. Migration to a **Bitbucket/Jira service account** is a later migration, not a redesign, and should happen **before wider rollout**. Same person-dependency theme as **O7**. **Build nothing for it now.** | plan3 §3.7 · plan3 §3.9 |
+| **O12** | ✅ **RESOLVED** (2026-07-29) | **Gate 0b's local/VM split.** Ruled by Jay: as written, Gate 0b required a provisioned VM and an on-VM smoke, so it could not pass until deployment — while gating plan1, which is built locally. **`GATE 0b-LOCAL` gates plan1; `GATE 0b-VM` gates deployment and plan3's rollout.** No checklist item was deleted or reworded; B.7 was not renumbered. | plan0 B.7a/B.7b · plan1 prereq · plan3 §3.7 |
 
-> **Only two questions remain open across the whole plan set** — O3 (real per-cycle timing) and the model
-> re-import runbook specifics. Both need something to actually run before they can be answered. Full list:
-> `docs/plan_change_log_jarvis_2.md` Part 1.
+> **Three questions remain open across the whole plan set** — O3 (real per-cycle timing), the model
+> re-import runbook specifics, and O9's next-onboarding-target confirmation. The first two need something
+> to actually run before they can be answered. Full list: `docs/plan_change_log_jarvis_3.md` Part 1.
+
+---
+
+## GATE 0a — PASSED (2026-07-29)
+
+Gate 0a passes on **PoC 2 + PoC 5 + the JARVIS validation path (2b + A.2b)** — all proven.
+**PoC 3** is **superseded** by B.4 (unit-tested modules, a stronger mechanism than a PoC).
+**PoC 4**'s permissions half is already satisfied; its **API-shape** half is a cheap smoke test due
+before plan3 §3.2. **PoC 7**'s decision rule is **retired** on the evidence of 10–12 manually executed
+tickets; **A.10a** (suite-frequency count) is scheduled and **A.10b** (the ≥50 labelled set) is carried
+as **O8** against Gate 1. **Phase 0.B may begin.** *(Ruled by Jay, 2026-07-28 / 2026-07-29.)*

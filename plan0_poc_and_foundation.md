@@ -156,8 +156,18 @@ using the dai apis used in the automated JIRA ticket creation initiative to fetc
 - **Push access to the *validation* repo** (`agentic-eggplant-automation`, branch `Enovia`) is a **separate PAT / permission** and must be confirmed independently — the validation gate force-pushes there on every cycle, which is a different right from opening a PR.
 **Validation-repo permission — settled.** Jay holds **admin** on the validation repo, and force-push to `refs/heads/Enovia` with the configured PAT (`JARVIS_PAT`) **works**. No branch-permission exemption is outstanding.
 
-**Verification:** read returns content; branch 201; PR 201 (sandbox); a force-push to the validation repo's `Enovia` branch succeeds with the credential recorded as `JARVIS_PAT`.
-**DoD:** read + branch + PR proven on the production repo path; **validation-repo force-push permission separately confirmed**; both PAT scopes recorded.
+> **The permissions half of this step's DoD is ALREADY SATISFIED — do not re-litigate it.** Jay holds
+> organisational approval (Megha, Mahavir, Gaurav) for these operations on `enovia-plm-test-automation`,
+> and his Bitbucket PAT carries the required access. **What this step still proves is purely the
+> Bitbucket *Server/DC* REST API shape** — the branch-create endpoint
+> (`/rest/branch-utils/1.0/…` with `{name, startPoint}`) and especially **PR create with
+> `fromRef`/`toRef` refs objects**, which differs from Cloud. That makes this a **cheap smoke test**
+> rather than a risk gate: run it any time **before plan3 §3.2**, which is the first step that depends
+> on it. Note that **B.7's smoke covers read + sandbox branch only — PR create is the one shape it does
+> not exercise.**
+
+**Verification:** read returns content; branch 201; **PR 201 (sandbox) — the shape that matters**; a force-push to the validation repo's `Enovia` branch succeeds with the credential recorded as `JARVIS_PAT`.
+**DoD:** the **API shapes** proven on the production repo path (read + branch + **PR create**); validation-repo force-push permission separately confirmed; both PAT scopes recorded. *(Permissions: already satisfied — see above.)*
 
 ### Step A.8 — PoC 5: Jira DC read / comment / attach + **LLM-based ticket-metadata extraction** — *Owner: Agent + (User)*
 **Goal:** confirm **REST v2 (Data Center)** behavior on a disposable test ticket, AND prove the four ticket fields the pipeline needs — `runid`, `title`, `description`, `test_script_name` — are reliably extractable from real tickets by the LLM regardless of where in the response they live or what casing/phrasing they use.
@@ -183,13 +193,41 @@ using the dai apis used in the automated JIRA ticket creation initiative to fetc
 >   "passed-with-swallowed-exceptions" observation — is **plan1's golden regression** (plan1 §1.4.5
 >   Verification, scored at Gate 1). It is not weakened, only verified where it belongs.
 
-### Step A.10 — PoC 7: base-rate study (≥50 historical tickets) — *Owner: Agent + (User)*
-**Goal:** measure the real bug-type distribution; decides engine fit + whether vision moves up.
-**Actions:**
-1. Agent: write `scripts/categorize_tickets.py` — JQL `project = TESTAUTOMA AND component = "Enovia PLM Automation" AND status = Done ORDER BY resolved DESC`, ≥50 tickets; for each record key, summary, actual fix (file/line/change from linked commit if available), and a proposed **category** from the master's failure families (Claude proposes via `MODEL_LIGHT`; output to `tracks/enovia/ticket_base_rate.json` + a summary table).
-2. **(User)** confirm/correct every label (semi-automated labeling, human-confirmed).
-**Decision rule (record in `poc_results.md`):** code-reasoning families ≥60% → proceed, vision deferred · 40–60% → proceed, vision scheduled post-Phase-2 · <40% → **STOP**, pull the multimodal screenshot module into Phase 1 scope. This file seeds the ≥50 validation tickets in plan1.
-**DoD:** ≥50 confirmed labels; decision recorded.
+### Step A.10 — PoC 7: base-rate study — *Owner: Agent + (User)*
+**Goal:** order the suite-onboarding queue now, and assemble the ≥50-ticket labelled set by the time Gate 1 is scored.
+
+#### Part 1 — the decision rule is **RETIRED**
+The former rule — *code-reasoning families ≥60% → proceed · 40–60% → vision post-Phase-2 · <40% → **STOP*** — is **deleted**.
+
+**Why (ruled by Jay, 2026-07-29):** Jay ran the **full diagnosis→fix→validate flow manually across 10–12 real Enovia tickets** — repo connected, real DAI error logs and screenshots supplied, fixes validated, failures iterated on. **That is direct evidence of engine fit, and it is stronger than a category-label distribution**, which only ever proxied for it. It also settles the vision question empirically: **vision stays deferred** (and `view_screenshot` is already an on-demand tool, so nothing is blocked either way). Those tickets are captured in `tracks/enovia/ticket_findings.md` (B.4 action 6).
+
+#### Step A.10a — suite-frequency count — small, scripted, **no human labelling**
+Agent: `scripts/categorize_tickets.py` runs the JQL `project = TESTAUTOMA AND component = "Enovia PLM Automation" AND status = Done ORDER BY resolved DESC` and, for each resolved ticket, records **only the failing test and the suite that owns it**, then prints a frequency table.
+
+**Why this half is worth doing early:** it produces a **frequency-ranked onboarding order for O4**. Jay is otherwise onboarding 16 suites in arbitrary order, and **O4 is the largest constraint on how much of the ticket flow JARVIS can serve** — onboarding the highest-frequency suites first is the difference between covering most tickets early and covering them last. It also answers **O9**'s scheduling question as a by-product.
+**No family labels, no root-cause analysis, no human review pass.**
+
+#### Step A.10b — the ≥50 labelled set — **deferred to Gate 1 scoring**
+Same script, `--label` mode: drafts categories from the master's failure families via `MODEL_LIGHT` for **(User)** confirmation → `tracks/enovia/ticket_base_rate.json`. **Not a Phase 0.B activity and not a plan1 blocker.** Carried as open item **O8** against **Gate 1**.
+
+#### Part 3 — the dataset accumulates as a **by-product**, so nothing is re-labelled later
+This is the mechanism that replaces the labelling session, and it is a **build requirement, not a testing one**. UP-11 already states the flywheel is *"wired from day one"*, so this adds fields to a schema being built anyway.
+
+The **trajectory record must carry the labelling columns from day one** — `src/models/trajectory.py`, and whatever `flywheel/trajectory_logger.py` writes into `data/trajectories/enovia.jsonl` (specified at plan3 §3.6.1):
+
+```
+failing_test · owning_suite · family · families_present[] · multi_cause
+knowledge_source · fixable_component · vision_needed
+```
+
+These are exactly A.10's columns plus plan4 §4.0 item 2's three additions. **Reason, recorded inline:** every ticket JARVIS processes during development yields these fields **for free**; plan4 §4.0 item 2 warns that omitting them means **a human re-labels ≥50 tickets by hand later**. This is how that is avoided without ever holding a labelling session.
+
+> **Honest limitation — do not drop this line:** tickets processed during development are a
+> **self-selected sample**, so they support *tracking improvement* but **not a headline base-rate
+> claim**. When Gate 1 is scored, draw the ≥50 sample by JQL (**A.10b**); by then most of its labels
+> already exist.
+
+**DoD:** **A.10a** — suite-frequency table produced and used to order O4. **A.10b** — carried as **O8**, due at Gate 1 scoring, not before.
 
 ### GATE 0a — PoC GO/NO-GO — *Owner: (User) decision, checklist by Agent*
 Print and have the user confirm:
@@ -201,13 +239,21 @@ Print and have the user confirm:
 | 1 runscript headless + results folder | n.a. (deferred) |
 | 1b SUT outside DAI → **`VALIDATION_MECHANISM=jarvis-dai` recorded** | n.a. (deferred) |
 | 1e runscript ≡ DAI parity *(local-runscript path only)* | n.a. (deferred) |
-| 3 static call-graph + ripgrep | ☐ **not done** — plan0 B.4 builds it properly regardless |
-| 4 Bitbucket read/branch/PR | ☐ **not done** — **must smoke before plan3 §3.2** |
+| 3 static call-graph + ripgrep | **RETIRED — superseded by B.4**, which builds the parser, call-graph, ripgrep search and lint as **real modules with unit tests**. A separate PoC adds nothing. *Superseded, not skipped* — the risk it existed to retire is retired by a stronger mechanism. **B.4 itself is untouched.** |
+| 4 Bitbucket read/branch/PR | ☐ **not done — cheap smoke test, any time before plan3 §3.2.** *Permissions are settled*: Jay holds organisational approval (Megha, Mahavir, Gaurav) for these operations on `enovia-plm-test-automation`, and his Bitbucket PAT carries the required access. **What remains unproven is purely the Bitbucket *Server/DC* API shape** — specifically **PR create with `fromRef`/`toRef` refs objects**, which differs from Cloud. B.7's smoke covers **read + sandbox branch only**, so **PR create is the one shape it does not exercise.** |
 | 5 Jira read/comment/attach + **runid extraction rule** | ✅ **PROVEN** — PROGRESS 2026-06-12 (Jira REST v2 fetch + LLM runid extraction) |
 | 6 **Claude reachable with working credentials** | ✅ **PROVEN (connectivity, from the development machine)** — Opus 4.7 through the Keysight gateway, after the `claude-opus-4-6` whitelist and `load_dotenv(override=True)` root-cause (PROGRESS 2026-06-12). **Not** run on a VM (that folds into B.7) and did **not** re-derive the 8055 diagnosis (that is plan1's golden regression) |
 | 7 base rate supports approach | ☐ **not done** — Gate 1 cannot be *scored* without it |
-| dedicated EPF license + RDP SUT secured **(User)** | ☐ |
-**Rule:** **PoC 7** must pass, **PoC 2 + 5** (the runid evidence chain) must pass, and **the JARVIS validation path (PoC 2b + A.2b) must pass** — JARVIS is the single mandated validation mechanism, so the old either/or with the local `runscript` loop no longer applies. **Both are proven.** If the validation path, the evidence chain, or the base rate fails → STOP and re-architect that part before any build. The rest are cheaper to work around.
+| dedicated EPF license + RDP SUT secured **(User)** | ✅ **PROVEN** — EPF, the licenser, the co-located Design + Run agents and the `Jay_130` SUT connection are installed and configured, evidenced by A.2/A.2b's full **PASSED** run (PROGRESS 2026-07-28) |
+**Rule:** **Gate 0a passes on PoC 2 + PoC 5 + the JARVIS validation path (2b + A.2b) — all proven.**
+
+- **PoC 3** is **superseded** by B.4, which builds the same capability as unit-tested modules.
+- **PoC 4**'s permissions half is **already satisfied**; its **API-shape** half is a **cheap smoke test that must pass before plan3 §3.2**.
+- **PoC 7**'s decision rule is **retired** on the evidence of **10–12 manually executed tickets**. Its labelling **exercise** is deferred: **A.10a** (suite-frequency count) is small and scheduled; **A.10b** (the ≥50 labelled set) is carried as **O8** against **Gate 1**, fed by trajectory records accumulated during development.
+
+**Phase 0.B may begin.** *(2026-07-28 / 2026-07-29, ruled by Jay.)*
+
+JARVIS is the single mandated validation mechanism, so the old either/or with the local `runscript` loop no longer applies. If the validation path or the evidence chain were to fail → STOP and re-architect that part before any build.
 
 ---
 
@@ -357,10 +403,29 @@ The winget installs, `uv`, the ✓/✗ component table and the reserved EPF lice
 **DoD:** state store + bus tested; a fake run's events fully replayable from the DB.
 
 ### Step B.7 — Integration smoke test + GATE 0b — *Owner: Agent + (User)*
-**Goal:** one script exercises every integration from **`eggptdai10`** — the JARVIS VM that hosts the DAI, the agents, `C:\Eggplant_Suites`, the working copy and the orchestrator itself.
-> **Where development actually happens.** Day-to-day development and unit testing run on the **(User)'s local machine**; VM deployment comes later. The inherently VM-bound steps — **B.2** provisioning, **B.4**'s clone + scheduled tasks, **B.4b**'s DAI authoring, and **this step** — stay **(User)-on-VM**. B.7 is **the first time the full integration set runs on the target host**, and that is precisely its value. Do not weaken it into a local run.
+**Goal:** one script exercises every integration — run **locally first (B.7a)**, then **on `eggptdai10` at deployment (B.7b)**. `eggptdai10` is the JARVIS VM that hosts the DAI, the agents, `C:\Eggplant_Suites`, the working copy and the orchestrator itself.
+
+> **Why this step and Gate 0b split (ruled by Jay, 2026-07-29 — open item O12).** As previously written,
+> Gate 0b required a provisioned VM and an on-VM smoke, so it could not pass until deployment — while
+> gating **plan1**, which is built locally. That is a deadlock, not a standard. The gate now splits by
+> **what machine can prove each item**: **`GATE 0b-LOCAL` gates plan1**; **`GATE 0b-VM` gates deployment
+> and plan3's rollout.** **No checklist item is deleted and no item's substance is reworded** — each is
+> simply filed under the machine that can prove it. **B.7 is not renumbered.**
+
+> **Where development actually happens.** Day-to-day development and unit testing run on the **(User)'s local machine**; VM deployment comes later. The inherently VM-bound steps — **B.2** provisioning, **B.4**'s clone + scheduled tasks, **B.4b**'s DAI authoring, and **B.7b** — stay **(User)-on-VM**.
 **Actions:** the Agent writes `scripts/test_integrations.py` printing a ✓/✗ table: Jira read + **runid extraction on a real ticket** · Bitbucket read + sandbox branch · **production**-DAI log+screenshot by runid · **JARVIS validation dry-run** (push a no-op commit to `agentic-eggplant-automation@Enovia`, **assert `git ls-remote` equals the pushed SHA**, trigger the registry's test config for the suite, poll to completion via `poll_backoff`, fetch the results chain, **assert the run log's `Using Git commit SHA` equals the pushed SHA**) · runscript smoke (1-line script on the runner — *deferred; skip unless the local-runscript variant is revived*) · **Claude ping via `settings.model` and the configured base URL — this is the VM-egress verification folded in from A.9; if it fails, (User) files the firewall ticket now.** *Use `settings.model` — **never** a literal model ID. `claude-opus-4-6` is **not** whitelisted on the gateway and returns a misleading `401 invalid x-api-key` that is easily mistaken for an egress failure (root-caused, PROGRESS 2026-06-12); filing a firewall ticket for it would chase a problem that does not exist.* · static call-graph on the 8055 script · ripgrep blast radius · lint on a sample script · SQLite store round-trip. **(User)** run it on the VM; paste the table.
-**GATE 0b checklist** (print; (User) confirms): repo+deps ☐ · JARVIS VM provisioned, egress green ☐ · EPF license reserved, SUT reachable ☐ · Jira (incl. runid)/Bitbucket/production-DAI-evidence/Claude verified from VM ☐ · **JARVIS validation path triggers + completes** ☐ · runscript runs an Enovia script *(deferred — n.a. this version)* ☐ · **two remotes configured on the working copy: `origin` → `enovia-plm-test-automation`, `agentic-eggplant-automation` → `agentic-eggplant-automation`** ☐ · **`tracks/enovia/test_config_registry.yaml` populated and resolving for the target suite** ☐ · **pushed-SHA assert working at both edges (`git ls-remote` pre-trigger, `Using Git commit SHA` post-completion)** ☐ · handler_map + vocabulary + static modules + lint correct ☐ · context.md curated & reviewed ☐ · evidence retrieval proven (no SharePoint) ☐ · **`VALIDATION_MECHANISM=jarvis-dai` recorded** ☐ · hourly pull + nightly rebuild + `C:\Eggplant_Suites` pull scheduled ☐ · state store + event bus tested ☐.
-**DoD:** smoke test all-green. **Plan 1 cannot begin until Gate 0b passes.**
+#### Step B.7a — run the smoke **locally** — satisfies `GATE 0b-LOCAL`
+The Agent writes `scripts/test_integrations.py` (above); **(User)** runs it **on the development machine**; all-green satisfies `GATE 0b-LOCAL`. **B.7a is an *additional, earlier* checkpoint — never a replacement for B.7b.**
+
+#### Step B.7b — run **the same script, unchanged, on `eggptdai10`** — satisfies `GATE 0b-VM`
+**(User)** runs it on the JARVIS VM at deployment. **B.7b is the first time the full integration set runs on the target host, and that is precisely its value. Do not weaken it into a local run.** Passing B.7a does **not** discharge B.7b; no later pass may read this split as permission to skip the VM run.
+
+**GATE 0b-LOCAL checklist** (print; (User) confirms) — *provable from the development machine; **gates plan1***:
+repo+deps ☐ · Jira (incl. runid)/Bitbucket/production-DAI-evidence/Claude verified ☐ · **JARVIS validation path triggers + completes** ☐ · **`tracks/enovia/test_config_registry.yaml` populated and resolving for the target suite** ☐ · **pushed-SHA assert working at both edges (`git ls-remote` pre-trigger, `Using Git commit SHA` post-completion)** ☐ · handler_map + vocabulary + static modules + lint correct ☐ · context.md curated & reviewed ☐ · evidence retrieval proven (no SharePoint) ☐ · **`VALIDATION_MECHANISM=jarvis-dai` recorded** ☐ · state store + event bus tested ☐ · **the local working copy carrying both remotes: `origin` → `enovia-plm-test-automation`, `agentic-eggplant-automation` → `agentic-eggplant-automation`** ☐.
+
+**GATE 0b-VM checklist** (print; (User) confirms) — *machine-bound; **gates deployment and plan3's rollout***:
+VM tooling installed (B.2b) ☐ · egress re-verified on deployment day ☐ · **dedicated EPF licence reserved, SUT reachable** ☐ · **every integration verified *from the VM* (B.7b)** ☐ · **the VM working copy at `C:\agent\repo` carrying both remotes** ☐ · hourly pull + nightly rebuild + `C:\Eggplant_Suites` pull scheduled ☐ · runscript runs an Enovia script *(deferred — n.a. this version)* ☐.
+
+**DoD:** smoke test all-green on the machine in question. **Plan 1 cannot begin until `GATE 0b-LOCAL` passes. `GATE 0b-VM` gates deployment and plan3's rollout, not plan1.**
 
 ➡ Proceed to **plan1_diagnosis_and_chat.md**.

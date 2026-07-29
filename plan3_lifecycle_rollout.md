@@ -71,6 +71,17 @@ Per merged fix store `{ticket, branch, merge_sha, files}` (from the merge webhoo
 ## Phase 3.6 — Metrics + flywheel logging + merge webhook [UP-11, UP-13] — *Owner: Agent ((User): webhook registration)*
 ### Step 3.6.1 — Trajectory logger (`src/flywheel/trajectory_logger.py`)
 Append one JSONL record per run to `data/trajectories/enovia.jsonl` (mirror summary row into SQLite for querying): `{ts, run_id, ticket, dai_runid, mode, category, context_files, call_chain, blast_radius_handlers, diagnosis, candidate_fixes, lint_results, runscript_result, jarvis_gate_result, dispatcher_target, pushed_sha, executed_commit_sha, test_config_id, final_patch, attempt, approval: {decision, comment}, pr_url, merged, dev_edits, tokens_in/out, cost_usd, duration_s, transcript_path}`.
+
+**Labelling columns — carried from day one (plan0 A.10 Part 3).** The same record also carries
+`failing_test`, `owning_suite`, `family`, `families_present[]`, `multi_cause`, `knowledge_source`,
+`fixable_component`, `vision_needed`. These are A.10's labelling columns plus plan4 §4.0 item 2's three
+additions. **Why here:** every ticket JARVIS processes during development then yields them **for free**,
+so the ≥50-ticket labelled set (**O8**, due at Gate 1 scoring) accumulates as a by-product instead of
+requiring a separate labelling session — plan4 §4.0 item 2 warns that omitting them means a human
+re-labels ≥50 tickets by hand later. Add them to `src/models/trajectory.py` and to whatever
+`trajectory_logger` writes, at the same time as the rest of the record. *(Limitation, stated honestly:
+development tickets are a self-selected sample — good for tracking improvement, not for a headline
+base-rate claim. The Gate-1 sample is drawn by JQL, A.10b.)*
 > Why: a fix that passes DAI **and** merges unedited is a gold `(context, intent, verified_patch)` label; one the developer rewrote is a hard negative + correction. This corpus becomes, in order: (1) the living eval set, (2) few-shot/retrieval exemplars (UP-11 — the one place embeddings may later earn their keep), and only much later, if a measured prompting ceiling demands it, (3) training data. **Do not fine-tune now.**
 ### Step 3.6.2 — PR-merge webhook (`routes_webhooks.py`)
 **(User)** registers a Bitbucket repo webhook → `POST /api/webhooks/bitbucket` (shared-secret validated). On PR merged: set `merged=true`, compute `dev_edits` (diff agent branch vs merged result), store `merge_sha` for revert.
@@ -81,6 +92,7 @@ Aggregations from SQLite: totals, completion/fail, first-attempt & final pass ra
 **DoD:** every run appends a trajectory; merge webhook flips `merged`; metrics endpoint + page live; retrieval A/B recorded.
 
 ## Phase 3.7 — Operational maintenance + context refresh automation — *Owner: Agent builds, (User) operates*
+> **Deployment prerequisite:** everything in this phase runs on the JARVIS VM, so **`GATE 0b-VM` (plan0 B.7b) must have passed** before deployment and before plan3 §3.9's rollout. `GATE 0b-LOCAL` gated plan1; it does **not** discharge the VM run.
 - **Derived data is fully automatic:** the working copy pulls hourly; the **nightly scheduled job** (registered in plan0 §B.4) rebuilds `handler_map.yaml` + `handler_vocabulary.json` from the fresh clone — the agent's code knowledge never goes stale without human effort.
 - **Curated knowledge is human-approved, agent-assisted:** `context.md` is **never auto-rewritten**. Instead, after every merged AI fix, the pipeline drafts `tracks/enovia/context_suggestions/<TICKET>.md` (the new pattern learned: family, handler, fix shape, any rectangle/DPI discovery) for one-click human acceptance into `context.md` during the weekly review.
 - `scripts/verify_context.py` (weekly): diff `context.md`-documented handlers vs the repo (via handler_map + vocabulary); flag undocumented handlers; agent also self-reports unresolved handlers to `tracks/enovia/undocumented_handlers.txt`. Also: **re-run `scripts/run_eval.py` (10-ticket smoke subset) after any `context.md` or prompt change** [UP-10] — make this a documented rule in `docs/maintenance.md`.

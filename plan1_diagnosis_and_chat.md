@@ -1,6 +1,6 @@
 # PLAN 1 — DIAGNOSIS ENGINE + CHAT MVP (WEEKS 3–4) — v2 FOR THE AGENT
 
-> **Prereq:** GATE 0b passed. **Objective:** **JARVIS (Automation Testing Agent)** takes an Enovia Jira ticket ID **from a chat interface**, localizes the script + handler chain deterministically, reads **production** DAI logs/screenshots, produces a structured diagnosis via an **agentic tool loop**, posts it to Jira, and streams every step into the chat live. **No code changes this phase** — pure analysis; the zero-risk trust-builder. Gate 1 is the statistically honest accuracy bar.
+> **Prereq:** **`GATE 0b-LOCAL`** passed (plan0 B.7a). `GATE 0b-VM` gates deployment and plan3's rollout, **not** plan1 — plan1 is built and unit-tested locally. **Objective:** **JARVIS (Automation Testing Agent)** takes an Enovia Jira ticket ID **from a chat interface**, localizes the script + handler chain deterministically, reads **production** DAI logs/screenshots, produces a structured diagnosis via an **agentic tool loop**, posts it to Jira, and streams every step into the chat live. **No code changes this phase** — pure analysis; the zero-risk trust-builder. Gate 1 is the statistically honest accuracy bar.
 >
 > Build order: 1.1 orchestrator → 1.2 clients → 1.3 static wiring → 1.4 diagnosis engine → 1.5 chat backend → 1.6 chat frontend → 1.7 eval + validation. Each step compiles and is unit-tested before the next.
 
