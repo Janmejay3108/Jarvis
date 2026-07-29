@@ -216,7 +216,8 @@ Print and have the user confirm:
 ### Step B.1 — Project repo bootstrap — *Owner: Agent + (User)*
 **Goal:** the agent's own repo, exactly per the master layout (§4).
 **Actions:**
-1. **The Bitbucket repo `jarvis` already exists and is empty.** What remains for the **(User)** is to confirm: the default branch, the **≥1 PR approval** rule, and a PAT (Repo R/W, PR R/W, Branch create). *(This repo's `origin` points at `jarvis` — distinct from the Enovia working copy's `origin`, which points at `enovia-plm-test-automation`; see plan_master §4.1.)*
+1. **The agent repo is local-only for now — its repo-side actions are DEFERRED, not deleted.** Git tracks the project on the **(User)'s** machine and **no Bitbucket remote is configured yet**. The Bitbucket repo `jarvis` exists and is empty. Still required for the **(User)**, before any team member reads the code — unchanged in substance, only in timing: configure the `origin` remote, confirm the default branch, set the **≥1 PR approval** rule, and issue a repo PAT (Repo R/W, PR R/W, Branch create).
+   *(This is the **agent** repo's `origin` → `jarvis`. It is a different clone from the **Enovia working copy**, whose own `origin` → `enovia-plm-test-automation`; see plan_master §4.1. **The validation repo is unaffected** — `agentic-eggplant-automation` is still force-pushed every validation cycle and `JARVIS_PAT` is still required today.)*
 2. Agent: create the full directory tree from master §4 (empty `__init__.py` everywhere), `README.md`, `PROGRESS.md`, `.gitignore` (`.env`, `data/`, `*.log`, `.venv/`, `node_modules/`, `webapp/dist/`), and `pyproject.toml`:
 ```toml
 [project]
@@ -249,21 +250,41 @@ jarvis:                                     # the JARVIS validation gate — pla
   test_config_registry: tracks/enovia/test_config_registry.yaml   # D3 — suite -> test_config_id
 ```
    …plus `llm` (`model: claude-opus-4-7`, `anthropic_base_url`, optional `model_light`, `engine_mode: agentic`, `thinking_on_escalation: true`), `validation` (**`mechanism: jarvis-dai`** — replacing the old `inner_loop` flag; timeouts, `max_attempts: 3`, `n_best_on_retry: 2` **unchanged**), `approval_mode: manual`, `budget_usd_per_run: 10.0`.
-**Verification:** `pip install -e .[dev] && python -c "import fastapi, anthropic, structlog; print('ok')"`; `ruff check` clean.
-**DoD:** repo pushed; deps resolve; tree matches master layout.
+> **Local development environment — no provisioning step, by design.** Any package or tool the local
+> machine is missing is installed **inline by the coding agent as the need arises**, with **(User)**
+> granting permission at that moment. There is no separate provisioning step for the development
+> machine and none should be invented. B.2 provisions the **VM**, and only at deployment.
 
-### Step B.2 — VM provisioning scripts — *Owner: Agent writes, (User) runs*
-**Goal:** both VMs ready.
+**Verification:** `pip install -e .[dev] && python -c "import fastapi, anthropic, structlog; print('ok')"`; `ruff check` clean.
+**DoD:** repo tracked locally; deps resolve; tree matches master layout. *(The repo-side actions in step 1 — remote, default branch, approval rule, repo PAT — are **deferred**, not part of this DoD.)*
+
+### Step B.2 — JARVIS VM provisioning script — *Owner: Agent writes, (User) runs*
+**Goal:** the JARVIS VM (`eggptdai10`) ready. **One machine, one script.**
+
+> **What is already done, and proven.** Eggplant Functional + `runscript.bat`, the licenser, the
+> co-located Design and Run agents, `C:\Eggplant_Suites`, and the SUT connection to `Jay_130` are all
+> **installed and configured**, evidenced by A.2/A.2b's full **PASSED** run with the commit SHA traceable
+> in the run log. **The script therefore VERIFIES these components; it does not install them.**
+
 **Actions:**
-1. Agent: `scripts/setup_vm_orchestrator.ps1` — winget installs (Python 3.11, Git, Node LTS, `BurntSushi.ripgrep.MSVC`), `pip install uv`, and an egress check loop over `https://jira.it.keysight.com`, `https://bitbucket.it.keysight.com`, `$env:DAI_BASE_URL`, `https://api.anthropic.com` printing OK/FAIL per URL.
-2. Agent: `scripts/setup_vm_runner.ps1` — verify Eggplant Functional + `runscript.bat` path; configure `-LicenserHost`; install Git + ripgrep; verify the dedicated RDP SUT is reachable.
-3. **(User)** run both on the respective VMs; reserve **one EPF floating license** for the agent (license admin); paste egress results.
-**DoD:** orchestrator egress all-green; runner reruns PoC 1 + 1b successfully; license reserved.
+1. Agent: `scripts/setup_vm_jarvis.ps1` — **one script for the one machine.** *(It replaces the earlier pair of per-VM scripts; two scripts for one host is how the two-VM confusion returns.)* It contains:
+   - **winget installs:** Python 3.11, Git, Node LTS, `BurntSushi.ripgrep.MSVC`; `pip install uv`.
+   - **an egress check loop** over `https://jira.it.keysight.com`, `https://bitbucket.it.keysight.com`, `$env:DAI_BASE_URL`, `$env:JARVIS_DAI_BASE_URL` and the configured Anthropic base URL, printing OK/FAIL per URL.
+   - **an Eggplant component verification table (✓/✗, verify only):** Eggplant Functional + `runscript.bat` path present · `-LicenserHost` reachable · Design and Run agents registered · `C:\Eggplant_Suites` present and a clone of the validation repo · the `Jay_130` SUT connection reachable.
+2. **(User)** run it on the JARVIS VM; reserve **one EPF floating license** for the agent (license admin); paste the results.
+
+#### Step B.2a — VM egress — ✅ **VERIFIED, nothing to run**
+**(User)** Jay has confirmed (**2026-07-29**) that `eggptdai10` reaches the Claude gateway and **every API used in the PoCs**. Recorded as **proven on Jay's verification**, not on a committed script run — no script output is claimed here. The egress loop stays in `setup_vm_jarvis.ps1` as a **deployment-day re-verification**, not as an open action.
+
+#### Step B.2b — Tooling install + Eggplant component verification — **deferred to deployment day**
+The winget installs, `uv`, the ✓/✗ component table and the reserved EPF licence are **not needed while development is local** (G3; and see B.7a/B.7b). The script is **written now** so deployment day is a single `(User)` run — but it is not run now.
+
+**DoD:** `setup_vm_jarvis.ps1` **written and reviewed**; **VM egress verified (Jay, 2026-07-29)**; installs and licence reservation **deferred to deployment day**. *(PoC 1 and 1b are `n.a. (deferred)` and are deliberately **not** reintroduced as a completion condition — the previous DoD could not be met as written.)*
 
 ### Step B.3 — Credentials & config module — *Owner: Agent + (User)*
 **Goal:** every secret loads from env; nothing hardcoded.
 **Actions:**
-1. **(User)** provision: Jira PAT (R/W on TESTAUTOMA), Bitbucket PAT, DAI API access, Anthropic API key → `.env` on each VM.
+1. **(User)** provision: Jira PAT (R/W on TESTAUTOMA), Bitbucket PAT, DAI API access, Anthropic API key → `.env` on the JARVIS VM (and on the local development machine while development is local).
 2. Agent: implement `src/config.py` (pydantic-settings) — all PoC-era keys **plus**: `jira_base_url`, `dai_log_by_runid_url`, `jarvis_*` (validation repo url, PAT, JARVIS DAI url/v2 creds, branch, suites path, completion mode — **note there is no `jarvis_test_config_id` scalar**; the suite→config mapping lives in `tracks/enovia/test_config_registry.yaml` per D3), `anthropic_base_url`, `model` (Opus 4.7), optional `model_light`, `epf_runscript_path`, `epf_default_doc_dir`, `epf_license_host`, `working_copy_path`, `validation_mechanism` (= `jarvis-dai`), `engine_mode`, `approval_mode`, `budget_usd_per_run`, `db_path` (default `data/agent.db`), `sso_*`. Loads `.env` + merges `config/enovia.yaml` via `src/orchestrator/track_loader.py` (returns a typed `TrackConfig`).
 **Verification:** `python -c "from src.config import settings; print(settings.model)"` works with `.env`; unit test for track_loader.
 **DoD:** config module + track loader tested; secrets only in `.env`.
@@ -271,7 +292,7 @@ jarvis:                                     # the JARVIS validation gate — pla
 ### Step B.4 — Local clone + static layer + vocabulary [UP-3, UP-12] — *Owner: Agent + (User)*
 **Goal:** the deterministic retrieval layer that replaces the vector DB — now including the handler vocabulary and the Tier-0 lint.
 **Actions:**
-1. Agent: `scripts/clone_repo.ps1` (clone the **production** repo `enovia-plm-test-automation` to `C:\agent\repo` ↔ `settings.working_copy_path`, checkout `Testing_Mar10`, then `git remote add agentic-eggplant-automation <JARVIS_REPO_URL>` — **one working copy, two remotes pointing at two different Bitbucket repositories**: `origin` = the **production** repo `enovia-plm-test-automation` [pull `Testing_Mar10`; later `Jarvis-fix/*` push at plan3 PR time], `agentic-eggplant-automation` = the **validation** repo `agentic-eggplant-automation` [force-push the candidate to branch `Enovia` on every validation cycle]) + Task-Scheduler registrations for (a) an hourly `git pull --ff-only` on the working copy, (b) a **nightly rebuild job** that re-runs `build_handler_map.py` + `build_vocabulary.py` against the fresh clone, so the derived artifacts never go stale, and (c) a **scheduled `git pull` for `C:\Eggplant_Suites` on the JARVIS VM**, so the Design agent's local suites folder tracks the validation repo. **(User)** run on the respective VMs; confirm all three scheduled tasks.
+1. Agent: `scripts/clone_repo.ps1` (clone the **production** repo `enovia-plm-test-automation` to `C:\agent\repo` ↔ `settings.working_copy_path`, checkout `Testing_Mar10`, then `git remote add agentic-eggplant-automation <JARVIS_REPO_URL>` — **one working copy, two remotes pointing at two different Bitbucket repositories**: `origin` = the **production** repo `enovia-plm-test-automation` [pull `Testing_Mar10`; later `Jarvis-fix/*` push at plan3 PR time], `agentic-eggplant-automation` = the **validation** repo `agentic-eggplant-automation` [force-push the candidate to branch `Enovia` on every validation cycle]) + Task-Scheduler registrations for (a) an hourly `git pull --ff-only` on the working copy, (b) a **nightly rebuild job** that re-runs `build_handler_map.py` + `build_vocabulary.py` against the fresh clone, so the derived artifacts never go stale, and (c) a **scheduled `git pull` for `C:\Eggplant_Suites` on the JARVIS VM**, so the Design agent's local suites folder tracks the validation repo. **(User)** run on the JARVIS VM; confirm all three scheduled tasks.
 2. Agent: `scripts/build_handler_map.py` — walk every `*.suite/Scripts/*.script`, parse `to handle <name>` / `to <name>` / `function <name>` definitions, map call-prefixes → repo-relative paths; seed/verify against known prefixes (CommonEnovia, common, configEnovia, LaunchApp, FileOperations, EnoviaSearch, exceptionHandling, CommonEnoviaContd, EnoviaChangeManagement, MQLTestData, WINSCP) → `tracks/enovia/handler_map.yaml`.
 3. Agent: promote PoC-3 logic into real modules with unit tests on synthetic fixtures:
    - `src/static/sensetalk_parser.py` — `handler_defs(text)`, `handler_calls(text)` (ignore strings/comments).
@@ -339,7 +360,7 @@ jarvis:                                     # the JARVIS validation gate — pla
 **Goal:** one script exercises every integration from **`eggptdai10`** — the JARVIS VM that hosts the DAI, the agents, `C:\Eggplant_Suites`, the working copy and the orchestrator itself.
 > **Where development actually happens.** Day-to-day development and unit testing run on the **(User)'s local machine**; VM deployment comes later. The inherently VM-bound steps — **B.2** provisioning, **B.4**'s clone + scheduled tasks, **B.4b**'s DAI authoring, and **this step** — stay **(User)-on-VM**. B.7 is **the first time the full integration set runs on the target host**, and that is precisely its value. Do not weaken it into a local run.
 **Actions:** the Agent writes `scripts/test_integrations.py` printing a ✓/✗ table: Jira read + **runid extraction on a real ticket** · Bitbucket read + sandbox branch · **production**-DAI log+screenshot by runid · **JARVIS validation dry-run** (push a no-op commit to `agentic-eggplant-automation@Enovia`, **assert `git ls-remote` equals the pushed SHA**, trigger the registry's test config for the suite, poll to completion via `poll_backoff`, fetch the results chain, **assert the run log's `Using Git commit SHA` equals the pushed SHA**) · runscript smoke (1-line script on the runner — *deferred; skip unless the local-runscript variant is revived*) · **Claude ping via `settings.model` and the configured base URL — this is the VM-egress verification folded in from A.9; if it fails, (User) files the firewall ticket now.** *Use `settings.model` — **never** a literal model ID. `claude-opus-4-6` is **not** whitelisted on the gateway and returns a misleading `401 invalid x-api-key` that is easily mistaken for an egress failure (root-caused, PROGRESS 2026-06-12); filing a firewall ticket for it would chase a problem that does not exist.* · static call-graph on the 8055 script · ripgrep blast radius · lint on a sample script · SQLite store round-trip. **(User)** run it on the VM; paste the table.
-**GATE 0b checklist** (print; (User) confirms): repo+deps ☐ · both VMs provisioned, egress green ☐ · EPF license reserved, SUT reachable ☐ · Jira (incl. runid)/Bitbucket/production-DAI-evidence/Claude verified from VM ☐ · **JARVIS validation path triggers + completes** ☐ · runscript runs an Enovia script *(deferred — n.a. this version)* ☐ · **two remotes configured on the working copy: `origin` → `enovia-plm-test-automation`, `agentic-eggplant-automation` → `agentic-eggplant-automation`** ☐ · **`tracks/enovia/test_config_registry.yaml` populated and resolving for the target suite** ☐ · **pushed-SHA assert working at both edges (`git ls-remote` pre-trigger, `Using Git commit SHA` post-completion)** ☐ · handler_map + vocabulary + static modules + lint correct ☐ · context.md curated & reviewed ☐ · evidence retrieval proven (no SharePoint) ☐ · **`VALIDATION_MECHANISM=jarvis-dai` recorded** ☐ · hourly pull + nightly rebuild + `C:\Eggplant_Suites` pull scheduled ☐ · state store + event bus tested ☐.
+**GATE 0b checklist** (print; (User) confirms): repo+deps ☐ · JARVIS VM provisioned, egress green ☐ · EPF license reserved, SUT reachable ☐ · Jira (incl. runid)/Bitbucket/production-DAI-evidence/Claude verified from VM ☐ · **JARVIS validation path triggers + completes** ☐ · runscript runs an Enovia script *(deferred — n.a. this version)* ☐ · **two remotes configured on the working copy: `origin` → `enovia-plm-test-automation`, `agentic-eggplant-automation` → `agentic-eggplant-automation`** ☐ · **`tracks/enovia/test_config_registry.yaml` populated and resolving for the target suite** ☐ · **pushed-SHA assert working at both edges (`git ls-remote` pre-trigger, `Using Git commit SHA` post-completion)** ☐ · handler_map + vocabulary + static modules + lint correct ☐ · context.md curated & reviewed ☐ · evidence retrieval proven (no SharePoint) ☐ · **`VALIDATION_MECHANISM=jarvis-dai` recorded** ☐ · hourly pull + nightly rebuild + `C:\Eggplant_Suites` pull scheduled ☐ · state store + event bus tested ☐.
 **DoD:** smoke test all-green. **Plan 1 cannot begin until Gate 0b passes.**
 
 ➡ Proceed to **plan1_diagnosis_and_chat.md**.

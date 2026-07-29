@@ -276,7 +276,7 @@ jarvis/                                  # git repo root == project root == Bitb
 │   └── src/ (App.tsx components/ hooks/ api/)
 ├── scripts/
 │   ├── poc_dai.py poc_jarvis_validation.py poc_bitbucket.py poc_jira.py poc_claude.py poc_static.py poc_runscript.ps1
-│   ├── categorize_tickets.py setup_vm_orchestrator.ps1 setup_vm_runner.ps1 clone_repo.ps1
+│   ├── categorize_tickets.py setup_vm_jarvis.ps1 clone_repo.ps1
 │   ├── build_handler_map.py build_vocabulary.py run_validation.py run_eval.py
 │   ├── test_integrations.py verify_context.py
 ├── tracks/enovia/
