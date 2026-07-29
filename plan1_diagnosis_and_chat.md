@@ -78,7 +78,7 @@ Token-budgeted assembly for single-shot mode AND for the tool-loop's initial mes
 ## Phase 1.4 — Diagnosis engine v2 (agentic) — *Owner: Agent*
 
 ### Step 1.4.1 — Failure-family router [UP-5] (`src/analysis/family_router.py`)
-`classify(ticket_text, log_text) -> {family, confidence, signals}`. Rule layer first (regexes: `ImageFound(text:` misses → text_label/search_rectangle; `set TextStyle.dpi` → dpi_cascade; `caught … ignored`/empty catch → silent_exception_swallowing; timeout/`waitFor` gaps → missing_wait; …). If no rule fires → one light model call (`model_light` if configured, else Opus with small `max_tokens` — the family hint is advisory, not reasoning-critical): forced-tool output `{family, confidence}`. Output selects `prompts/family_exemplars/<family>.md` (2–3 worked examples each, sourced from `context.md`'s pattern library — the Agent drafts, **(User)**/track dev reviews).
+`classify(ticket_text, log_text) -> {family, confidence, signals}`. Rule layer first (regexes: `ImageFound(text:` misses → text_label/search_rectangle; `set TextStyle.dpi` → dpi_cascade; `caught … ignored`/empty catch → silent_exception_swallowing; timeout/`waitFor` gaps → missing_wait; …). If no rule fires → one light model call (`model_light` if configured, else Opus with small `max_tokens` — the family hint is advisory, not reasoning-critical): forced-tool output `{family, confidence}`. Output selects `prompts/family_exemplars/<family>.md` (2–3 worked examples each, sourced from `context.md`'s pattern library — the Agent drafts, **(User)**/track dev reviews). **Draw on `tracks/enovia/ticket_findings.md` when drafting these:** its *"what the model got wrong first, and what corrected it"* line is precisely what a few-shot exemplar needs to teach — a worked example that only shows the right answer teaches far less than one that shows the plausible wrong turn beside it. The same line feeds plan4 §4.6.5's capture loop.
 
 ### Step 1.4.2 — Tool registry + schemas [UP-1, UP-2] (`src/agentic/tools.py`, `schemas.py`)
 Read-only tools exposed to Claude during diagnosis (each: JSON schema, handler, per-run call budget, structlog + `tool.called`/`tool.result` events):
@@ -151,6 +151,8 @@ Vite + React + TypeScript + Tailwind. Layout: left sidebar (conversation list + 
 - `scoring.py`: merge human verdicts (`correct|partial|incorrect`), compute overall + per-category accuracy with CIs, avg time, avg cost, crash count → markdown report. `scripts/run_eval.py --label <name>` is the **one command rerun after any prompt/context.md change** from now on.
 
 ### Step 1.7.2 — Dataset — *(User)*
+> **Start from `tracks/enovia/ticket_findings.md`.** The 10–12 tickets Jay ran manually are the **first rows** of `validation_tickets.json` — they already have a confirmed root cause and a known-good fix, which is exactly what a scored row needs. Carry **the same columns as O8's labelling** (`failing_test`, `owning_suite`, `family`, …) so **nothing is labelled twice**. The rest of the ≥50 comes from **A.10b** at scoring time, drawing on trajectory records accumulated during development (plan0 A.10 Part 3).
+
 Extend `ticket_base_rate.json` into `validation_tickets.json` (≥50: key, category, `fix_description` = actual file/line/change, complexity). Cover every in-scope family; include TESTAUTOMA-8055 + the 2 "by-eye" control tickets.
 
 ### Step 1.7.3 — Run + score — *(User runs; Agent analyzes)*
