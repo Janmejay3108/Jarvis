@@ -247,8 +247,9 @@ jarvis/                                  # git repo root == project root == Bitb
 ├── plan_master.md  plan0…plan4.md       # the plan set lives at root; it is the entry point
 ├── pyproject.toml  .env.example  README.md  PROGRESS.md  .gitignore  requirements-poc.txt
 ├── docs/                                # context.md maintenance.md later-enhancements.md
-│                                        # plan_change_log_jarvis.md plan_change_log_jarvis_2.md
+│                                        # plan_change_log_jarvis{,_2,_3,_4}.md
 │                                        # poc_execution_guide.md
+│                                        # FINDINGS_for_JARVIS.md  — cross-ticket findings + tool gaps
 ├── config/enovia.yaml                  # track config (repo, suites, DAI ids, models, modes, budgets)
 ├── src/
 │   ├── main.py  config.py
@@ -279,8 +280,17 @@ jarvis/                                  # git repo root == project root == Bitb
 │   ├── categorize_tickets.py setup_vm_jarvis.ps1 clone_repo.ps1
 │   ├── build_handler_map.py build_vocabulary.py run_validation.py run_eval.py
 │   ├── test_integrations.py verify_context.py
-├── tracks/enovia/
-│   ├── context.md handler_map.yaml handler_vocabulary.json prompt_overrides.md
+├── tracks/enovia/                       # the curated track knowledge set (see §2.4)
+│   ├── context.md                       # CORE, ~7.7K tokens, always in the cached prefix (UP-6)
+│   ├── context_appendix_handlers.md     # loaded ON TRIGGER only — see context.md "Appendix triggers"
+│   ├── context_appendix_messages.md
+│   ├── context_appendix_rectangles.md
+│   ├── context_appendix_finding_things.md
+│   ├── context_appendix_ticket_learnings.md
+│   ├── context_seed.md                  # cross-ticket seed the core was generated from
+│   ├── ticket_findings.md               # combined; sources in ticket_findings/
+│   ├── ticket_findings/                 # one file per solved ticket (nine today)
+│   ├── handler_map.yaml handler_vocabulary.json prompt_overrides.md
 │   ├── test_config_registry.yaml        # D3 — suite → test_config_id (replaces the old scalar env var)
 │   ├── validation_tickets.json ticket_base_rate.json poc_results.md
 │   └── gold_scripts/                    # UP-12 exemplar tests
