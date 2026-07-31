@@ -17,3 +17,11 @@ suites:
     smoke_target: TestCases/TESTAUTOMA_6167_VerifyDownloadTemplateOptionFromPartMasterWidget
     onboarded: 2026-07-28
     status: proven                                           # A.2 + A.2b, full PASSED run with SHA traceable
+  EngineeringCentral:
+    suite_dir: EngineeringCentral.suite
+    model: Engineering_Central_Pack_01
+    test_config_id: 271b648a-a5e5-43ee-b4d8-24bab75da263
+    dispatcher_script: EngineeringCentral_AgentDispatcher.script
+    smoke_target: TestCases/TESTAUTOMA_2941_113_ValidateHeaderConnectionForCALifecycleInAllstatesExcludingObsolete
+    onboarded: 2026-07-30
+    status: proven
