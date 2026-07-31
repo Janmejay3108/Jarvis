@@ -231,7 +231,62 @@ Both rules constrain the dispatcher template and the target-path derivation logi
 > **Port map on the JARVIS VM:** `:8000` = JARVIS DAI (HTTPS) · `:8080` = the JARVIS orchestrator +
 > chat app (target port — **confirm free at deploy time**). Two services, one host, distinct ports.
 
-**Handler-chain reality:** `test → suite handler (e.g. addHeaderOnly) → searchEnovia (CommonEnovia.script) → sub-handlers`. Failure families: `boolean_logic_gap, silent_exception_swallowing, search_rectangle, dpi_cascade, text_label, missing_wait, image_staleness (rare), handler_name_mismatch, config_value_stale, environment_issue, application_bug, test_data`.
+**Handler-chain reality:** `test → suite handler (e.g. addHeaderOnly) → searchEnovia (CommonEnovia.script) → sub-handlers`.
+
+#### Failure families — the canonical taxonomy (22)
+
+> **The test a family must pass.** *A family earns its place if and only if it **routes to a different
+> repair**.* Not if it describes a different symptom — if the **fix strategy** differs. This is the rule
+> that keeps the list from growing without limit, and it is the rule to apply to any future proposal.
+>
+> Each of the ten families added on 2026-07-30 passes it for the same damning reason: **the nearest
+> existing label names a wrong fix.** That is why they were added rather than folded in. Two worked
+> examples, because the cost is concrete rather than aesthetic — `search_criteria_too_broad`'s nearest
+> label is `test_data`, which is **not autofix-eligible**, so folding it would make JARVIS *decline a
+> ticket it can fix with a one-line change*; `criteria_order_vs_scroll_direction`'s nearest label is
+> `search_rectangle`, whose repair is *widen the rectangle* — not merely useless but **actively harmful**,
+> since a wider rectangle can match the wrong field.
+
+**Code / script defects — autofix-eligible (17):**
+
+| Family | Repair strategy |
+|---|---|
+| `boolean_logic_gap` | Make the boolean context receive a boolean (`ImageFound(...)`) |
+| `silent_exception_swallowing` | Remove or narrow the swallowing catch |
+| `search_rectangle` | Adopt a proven sibling rectangle or an anchor-relative rectangle |
+| `dpi_cascade` | Fix the DPI ladder / reset after use |
+| `text_label` | Correct the expected string |
+| `missing_wait` | Add or extend a wait on a **real condition** |
+| `image_staleness` (rare) | Update the stored image asset |
+| `handler_name_mismatch` | Correct the handler name or provider qualification |
+| `config_value_stale` | Update the value — **and every shadowing copy** |
+| `flaky_oracle` | **Change the verification mechanism, not its parameters** — move up the oracle order |
+| `unhandled_popup_overlay` | **Call the popup handler before the assertion** — the rectangle and the string were never wrong |
+| `hardcoded_coordinate_brittleness` | **Anchor the click to a located element** instead of a fixed coordinate |
+| `silent_parameter_typo` | **Correct the misspelled named parameter** — the call silently ran without the option |
+| `transient_render_state` | **Re-probe after settling**; never use a hover/dim-sensitive image as the sole presence oracle |
+| `false_pass_assertion` | **Establish presence before asserting absence** — see the warning in §6 |
+| `search_criteria_too_broad` | **Add or narrow a discriminating criterion** so the result set contains only the intended type (`Collaborative Policy = "EC Part"` is the live example) |
+| `criteria_order_vs_scroll_direction` | **Reorder the criteria to match the panel's top-to-bottom draw order** — `scrollTo` travels one way, so a criterion above one already passed is unreachable |
+
+**Not autofix-eligible — the routing differs (5):**
+
+| Family | Route |
+|---|---|
+| `environment_issue` | `diagnose_only` + remediation request |
+| `test_data` | `diagnose_only` |
+| `application_bug` | `diagnose_only` |
+| `change_scope` | **`ask_human`** — detectable free from the Jira label, before any diagnosis |
+| `transient_flake` | **Tolerate — re-run, fix nothing** |
+
+**Two boundaries to state explicitly, because they will otherwise be confused:**
+- `flaky_oracle` = the verification **mechanism** is wrong → change the mechanism.
+  `transient_render_state` = the mechanism is fine but a **transient render state** breaks it → re-probe.
+- **Naming:** the ticket records propose `environment_flake`; plan4 §4.1.1 already codes **`transient_flake`**, which wins — it is the existing usage, and the name is more accurate since not every flake is environmental.
+
+**This list is the single source of truth for `Diagnosis.category` (plan1 §1.4.2) and for plan4's
+`triage.fixable_families` (§4.1.1).** Those two must never drift from it: a schema constrained to a
+narrower list would **reject plan4's own classifications at runtime**.
 
 ---
 
@@ -374,6 +429,10 @@ Regex first: `(?i)\b(TESTAUTOMA-\d+)\b` + mode keywords (`diagnose`, `fix`, `sta
 11. **No LLM in wait paths:** any long-running external wait (JARVIS DAI validation run: 20 min–2 hr; any future SUT job) is waited on by plain orchestrator code — an `asyncio.Event` resolved by a webhook, an awaited subprocess, or an `asyncio.sleep` poll loop — never by the LLM/agentic tool-loop (UP-1) calling a "check status" tool repeatedly. Claude touches a validation gate only at its two edges: generating the candidate before triggering, and interpreting PASS/FAIL/logs after it resolves. See **plan2 Phase 2.5** for the concrete `JARVIS_COMPLETION_MODE` design (`poll_backoff` is the day-one mode; webhook is the registered upgrade path, O1). Cost during the wait window must be **$0**.
 12. **SenseTalk path + invocation rules (S1/S2, §2.3.6):** a script under `Scripts/TestCases/` is referenced as `TestCases/<name>` — **never** with a `.script` extension, **never** with a `Scripts/` prefix (EPF does not auto-search subfolders); dynamic invocation is plain `run targetScript`, **never** dot-notation `targetScript.run()`. Both rules are load-bearing for the dispatcher template and the target-path derivation logic — violating either produces a run that fails for the wrong reason.
 13. **Suite not onboarded → never validate.** The validation suite is **the suite that owns the FAILING TEST**, resolved by `validation_suite_of(run)` (plan2 §2.5.0) — **never** the suite containing the changed file, because most real fixes land in **shared handlers** that belong to no suite and have no test config. If that resolution yields a suite **not** present in `tracks/enovia/test_config_registry.yaml` (D3), the validation gate returns **`{status: NOT_ONBOARDED}` *before* any push or trigger**. The run is routed to the existing **diagnose-only** outcome with reason `suite_not_onboarded`, using the existing `ai-diagnosis-only` label. The gate **never** falls back to another suite's `test_config_id`, and `NOT_ONBOARDED` is **never** reported as PASS or FAIL. This is a routing decision taken *before* a run starts, not a run-time failure. Only one suite is onboarded today (**O4** tracks the rest), so this rule is load-bearing from day one. See plan2 §2.5.2 and §2.6.
+14. **JARVIS never modifies the candidate artifact between validation and PR.** The bytes validated are the bytes proposed. **Automatic rewriting of environment literals — hostnames, UNC paths, URLs, SUT addresses — before or after a validation run is prohibited**, however convenient. A PASS on rewritten code says nothing about the code that ships, and the SHA assertion at both edges (`git ls-remote` pre-trigger, `Using Git commit SHA` post-completion) exists precisely to make such a substitution detectable. It would also **mask the defect class it resembles**: TESTAUTOMA-7947's blocker 2 was a stale hardcoded URL, and auto-substituting environment literals would have hidden it.
+    **The permitted exception is additive only, and already defined:** the generated `<Suite>_AgentDispatcher.script` (**D4**) exists on the validation branch and never reaches the PR. It **adds** a scaffold entry point; it does **not** alter the code under test. *Additive validation-only scaffolding is permitted; mutating the artifact under validation is not.*
+    When a literal genuinely must differ per environment, the correct outcomes are, in order: **satisfy the path in the environment** (alias/share on the machine that reads it); **promote the literal into environment config as a proposed fix**, subject to normal review; or **route to `diagnose_only`** with a precise remediation request. **An honest "cannot validate here" outranks a false PASS.**
+15. **`false_pass_assertion` is the worst verdict failure available — treat it as such.** A check that reports success for a state **never observed** produces a **false PASS**, and a verdict built on one is worse than no verdict: it consumes the approval budget, ships an unvalidated change, and burns the trust the whole HITL design exists to protect. The live example is `common.waitForTextToDisappear` succeeding when the text was **never present** (`tracks/enovia/context.md`, *Shared contracts*). Wherever absence is asserted, **presence must be established first** — and Tier-0 lint flags the pattern statically (plan2 §2.3).
 
 ---
 

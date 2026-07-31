@@ -178,10 +178,10 @@ non-visual oracle)."
 
 ### Failure family
 
-`missing_wait` · **`PROPOSED: flaky_oracle`** — **`multi_cause: true`**
+`missing_wait` · **`flaky_oracle`** — **`multi_cause: true`**
 
 - `missing_wait` — R1, the unrendered toolbar. Clean fit.
-- **`PROPOSED: flaky_oracle`** (the source document's own proposed name; it also calls it
+- **`flaky_oracle`** (the source document's own proposed name; it also calls it
   `ocr_fragility`) — "the check is reading a low-fidelity, transient surface when a deterministic
   source of truth exists; the fix is to change the *mechanism* of verification, not its parameters."
   **None of the twelve fits, and forcing it would mis-route badly:**

@@ -41,7 +41,22 @@ Git helpers over `settings.working_copy_path`:
 
 ## Phase 2.3 — Tier-0 lint gate in the loop [UP-3] — *Owner: Agent*
 Wire `src/static/lint.py` as the first validation tier: after apply, lint every touched file. Any issue → publish `step.failed (linting)` with the issues, record as attempt feedback, **skip the SUT entirely**, continue to the next attempt. Unit test: a seeded unbalanced-`end if` patch consumes an attempt in milliseconds and never calls the runners.
-**DoD:** lint gate wired; SUT never invoked on a lint-failing patch.
+
+### Step 2.3.1 — Four family-derived rules — **added, nothing existing weakened**
+Four of the families added in plan_master §3 on 2026-07-30 are **statically decidable**, which makes them free precision. **These are additions to the existing rule set** (balanced blocks, unknown-handler calls, paren/quote balance from plan0 B.4 action 5; plan4 §4.6.3's boolean-context rule) — **no existing rule is relaxed, narrowed or removed.**
+
+| Rule | Flags | Severity |
+|---|---|---|
+| **`silent_parameter_typo`** | A **named parameter that does not match any of the callee's declared parameter names** — `watiFor:25` against a handler declaring `waitFor`. Statically decidable against the handler vocabulary [UP-12], zero cost, and it catches a class that **currently fails silently at runtime**: the call runs, the option is simply never applied. | **block** |
+| **`false_pass_assertion`** | `waitForTextToDisappear` — and equivalents — used **without a preceding presence check on the same text**. See plan_master §6.15: this produces a **false PASS**, the worst verdict failure available. | **block** |
+| **`hardcoded_coordinate_brittleness`** | A **literal coordinate pair passed to a click-family command** — `tripleClick[137,172]`, `tripleClick[106,75]`, `tripleClick(149,72)` all exist in the Enovia repo today. | **warn, do not block** — some are legitimate |
+| **`criteria_order_vs_scroll_direction`** | **Advanced-search criteria ordered against the panel's documented draw order.** `scrollTo` travels one way, so a criterion above one already passed is **unreachable**. **Source the draw order from `tracks/enovia/context.md`, never hardcode it**, so the rule tracks the document as the panel evolves — standard block (Source, Type, Extension, Title, Name, Modification Date, Creation Date, Owner) followed by the alphabetical block (Collaborative Policy, Is Last Minor Revision, Maturity State, …). | **warn, do not block** — the documented order may be incomplete |
+
+**Why this is the cheapest precision available in the whole system:** a lint rule costs **milliseconds**; a SUT run costs **12–17 minutes** and a DAI validation run **20 minutes to 2 hours**. Every defect caught here is a validation cycle not spent, and — for `false_pass_assertion` — a false PASS not shipped.
+
+**Unit tests (added to the existing list):** each rule fires on a seeded positive fixture drawn from the real repo occurrences above; each stays silent on a matching negative; the two advisory rules **warn without blocking** the attempt; and `criteria_order_vs_scroll_direction` **reads its order from `context.md`** — a test that edits the fixture's documented order changes the rule's verdict, proving it is not hardcoded.
+
+**DoD:** lint gate wired; SUT never invoked on a lint-failing patch; the four family-derived rules land **in addition to** every rule already specified.
 
 ---
 
