@@ -21,6 +21,8 @@ The two instances use **different auth schemes** and different clients; the pack
 ### Step 3.2.1 — `src/orchestrator/publisher.py`
 `push_fix_branch(ticket_key, wc_branch, message) -> (remote_branch, sha)`: in the working copy — **exclude every generated dispatcher (see the D4 rule below)** · `git add -A` · `commit -m` (message: `[JARVIS] Fix <TICKET>: <root cause one-liner>`) · `push -u origin wc/<T>:refs/heads/Jarvis-fix/<TICKET> --force-with-lease` (**`origin` = the production repo `enovia-plm-test-automation`** — first and only production write, distinct from the `agentic-eggplant-automation` remote used by the validation gate; the push creates the remote branch; no separate branch API call) · `rev-parse HEAD`.
 
+> **Candidate integrity (plan_master §6.14).** What is pushed here is **byte-for-byte what validation passed**. The publisher never rewrites environment literals — hostnames, UNC paths, URLs, SUT addresses — between the validated candidate and the PR; a PASS on rewritten code says nothing about the code that ships. The dispatcher exclusion below is the *only* permitted difference, and it is a **removal of validation-only scaffolding**, never an edit to the code under test.
+>
 > **D4 — hard rule (binding).** The publisher **must exclude every generated `*_AgentDispatcher.script`** from the pushed branch, and **must assert that none is present in the diff before pushing**. Dispatchers are validation scaffolding generated per cycle (plan2 §2.5.0); they exist only on `agentic-eggplant-automation@Enovia`. **A dispatcher reaching the production repo is a defect** — fail the publish rather than push one.
 ### Step 3.2.2 — `bitbucket_client.create_pull_request(source, target, title, description)` — Server/DC REST 1.0 `POST …/pull-requests` with `fromRef/toRef` `{id: refs/heads/<b>, repository:{slug, project:{key}}}`.
 ### Step 3.2.3 — PR description builder (auto, from run data):
@@ -89,7 +91,22 @@ base-rate claim. The Gate-1 sample is drawn by JQL, A.10b.)*
 Implement `flywheel/retrieval.py` scoring: same category (+3), handler overlap (+2/handler), suite match (+1), keyword overlap on root cause (tf-idf-lite) → top-k (default 2) successful trajectories (and 1 relevant failure as a caution) injected via the `recall_similar_cases` tool and the fix prompt. Unit tests incl. empty-corpus no-op. After ~10 real trajectories exist, **(User)** runs `scripts/run_eval.py --label retrieval_on` vs `--label retrieval_off` on 10 tickets to confirm no regression.
 ### Step 3.6.4 — `GET /api/metrics`
 Aggregations from SQLite: totals, completion/fail, first-attempt & final pass rates (+Wilson CIs via `evals/wilson.py`), PR-acceptance, avg time, avg cost, by-category, by-week, hours-saved (configurable mins/ticket assumption), recent runs.
-**DoD:** every run appends a trajectory; merge webhook flips `merged`; metrics endpoint + page live; retrieval A/B recorded.
+### Step 3.6.5 — Weekly context drift detection (`scripts/detect_context_drift.py`)
+> **This is the step plan0 B.4 action 6 has always promised** (*"plan3 adds weekly drift detection + agent-drafted update suggestions for human review"*). It matters **more** now that the context set's review gate has moved to the eval (B.4 action 6), and the **evidence markers make it mechanically cheap** — the set already tags every claim with how it was established.
+
+**The design is the mechanical/interpretive split. Everything follows from it.**
+
+- **Auto-verifiable claims auto-report, and may auto-correct.** Anything mechanically checkable: does this `test_config_id` still exist in the DAI · does this file path still resolve · is this handler still present in `handler_map.yaml` · does this resource key still hold this value · has a `[verified <date>]` claim **aged past its threshold**. Run weekly; **emit a report**; and **auto-correct only values that are mechanically confirmed both wrong AND newly-right** — a changed resource value, a moved path. Anything else is reported, not rewritten.
+- **Interpretive claims never auto-update.** *"This handler returns true even when the search failed"* is a **judgment**, not a lookup. When the underlying code changes, the detector **flags the claim as possibly stale and drafts a suggestion into `tracks/enovia/context_suggestions/`** for the weekly human review (§3.7). It does **not** rewrite it.
+- **Run the `[UNVERIFIED — check: <command>]` probes** as part of the same weekly job and report their results. Each already ships with the exact command and the machine it must run from, so this is execution, not authoring.
+- **`[live-run: TICKET]` claims get a distinct check:** these describe code as it was *during a run* and may describe code since fixed (the `watiFor` typo is the live example — real in the ticket record, already fixed in source). Re-check each against current source and flag divergence; **never** auto-correct, since the historical claim may still be the correct record of what happened.
+
+**The rationale, recorded so nobody relaxes it later:** `context.md` is in the **cached prefix of every call**. A wrong auto-update there **throws no error** — it silently degrades every diagnosis until a human happens to notice. Mechanical facts are safe to correct **because they are checkable**; judgments are not, and the asymmetry in blast radius is why the split is drawn exactly here.
+
+**Verification:** seed a fixture where a resource value changed → the detector reports it and auto-corrects; seed one where a handler's *behaviour* changed → it drafts a suggestion and **does not** rewrite; an aged `[verified]` claim is flagged; an `[UNVERIFIED]` probe runs and its result is reported.
+**DoD:** weekly job registered; both paths exercised on fixtures; a drafted suggestion appears in `context_suggestions/`; **plan0 B.4 action 6's forward reference now resolves to a real step.**
+
+**DoD (Phase 3.6):** every run appends a trajectory; merge webhook flips `merged`; metrics endpoint + page live; retrieval A/B recorded; **context drift detection running weekly**.
 
 ## Phase 3.7 — Operational maintenance + context refresh automation — *Owner: Agent builds, (User) operates*
 > **Deployment prerequisite:** everything in this phase runs on the JARVIS VM, so **`GATE 0b-VM` (plan0 B.7b) must have passed** before deployment and before plan3 §3.9's rollout. `GATE 0b-LOCAL` gated plan1; it does **not** discharge the VM run.
