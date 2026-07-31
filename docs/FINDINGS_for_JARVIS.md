@@ -284,11 +284,18 @@ is a small sample.
 **Three families the sources propose adding, each because the nearest existing label names a *wrong
 fix*:**
 
-| Proposed | From | Why the nearest existing label mis-routes |
-|---|---|---|
-| **`flaky_oracle`** (a.k.a. `ocr_fragility`) | 8448 | `text_label` → fix the token = **the hour-long dead end**. `dpi_cascade` → tune OCR = same trap one level down. `missing_wait` → extend the timeout = papers over it |
-| **`change_scope`** | 8278 | `text_label` describes the diff, not the problem. Routing there re-runs R1–R4 flailing. Detectable *free* from the Jira "Change Scope" label, before any diagnosis |
-| **`environment_flake`** | 8278, 8448 | Distinct from `environment_issue` because **nothing should be fixed** — the correct handling is to tolerate it in the verdict |
+> ✅ **All three were RATIFIED on 2026-07-30** and now live in **`plan_master` §3's canonical 22-family
+> taxonomy**, together with seven more from the same records. **One naming change:** `environment_flake`
+> was ratified under the name **`transient_flake`** — plan4 §4.1.1 already used that name, so the
+> existing usage won, and it is the more accurate label since not every flake is environmental.
+> The table below is retained as the **original rationale**, which is still the best statement of *why*
+> each earns its place.
+
+| Proposed | Ratified as | From | Why the nearest existing label mis-routes |
+|---|---|---|---|
+| **`flaky_oracle`** (a.k.a. `ocr_fragility`) | `flaky_oracle` | 8448 | `text_label` → fix the token = **the hour-long dead end**. `dpi_cascade` → tune OCR = same trap one level down. `missing_wait` → extend the timeout = papers over it |
+| **`change_scope`** | `change_scope` | 8278 | `text_label` describes the diff, not the problem. Routing there re-runs R1–R4 flailing. Detectable *free* from the Jira "Change Scope" label, before any diagnosis |
+| **`environment_flake`** | **`transient_flake`** | 8278, 8448 | Distinct from `environment_issue` because **nothing should be fixed** — the correct handling is to tolerate it in the verdict |
 
 **A structural gap in the `Fixable component` axis (`script`/`test_data`/`environment`/
 `application_bug`):** it cannot express **"environment-caused, script-remedied"**, which is what 8449's
