@@ -237,6 +237,7 @@ For each attempt record: hypothesis, change, original signature, new signature, 
 - Every factual or operational claim must carry one of the evidence markers defined above. [verified 2026-07-30]
 - Re-verify current-source facts after changes to Common, EnoviaCommon, Search, SuiteInfo, or Resources. [verified 2026-07-30]
 - Preserve uncertainty. Replace an `[UNVERIFIED]` marker only with the command result, date, machine, and direction that were actually checked. [verified 2026-07-30]
+- **A change to this file is not complete until `scripts/run_eval.py` has been re-run and the score has not regressed.** This is the review gate for the context set, and it is binding: this document is prompt-cached into *every* diagnosis call, so a wrong claim here degrades every diagnosis silently and without raising an error. A measured check is the only kind that catches that. See plan0 B.4 action 6 and plan1 §1.7.1. [verified 2026-07-30]
 
 Re-check volatile facts without printing credential values: [verified 2026-07-30]
 

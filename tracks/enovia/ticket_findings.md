@@ -12,15 +12,15 @@ They must never be removed, resolved, or filled in by inference.
 
 | Ticket | Failure family/families from the source ticket |
 |---|---|
-| [TESTAUTOMA-7947](#testautoma-7947) | `search_rectangle`; `config_value_stale`; `environment_issue`; `PROPOSED: unhandled_popup_overlay` |
+| [TESTAUTOMA-7947](#testautoma-7947) | `search_rectangle`; `config_value_stale`; `environment_issue`; `unhandled_popup_overlay` |
 | [TESTAUTOMA-7949](#testautoma-7949) | `config_value_stale` |
-| [TESTAUTOMA-8278](#testautoma-8278) | `text_label`; `environment_issue`; `PROPOSED: change_scope`; `PROPOSED: environment_flake` |
-| [TESTAUTOMA-8448](#testautoma-8448) | `missing_wait`; `PROPOSED: flaky_oracle` |
+| [TESTAUTOMA-8278](#testautoma-8278) | `text_label`; `environment_issue`; `change_scope`; `transient_flake` |
+| [TESTAUTOMA-8448](#testautoma-8448) | `missing_wait`; `flaky_oracle` |
 | [TESTAUTOMA-8449](#testautoma-8449) | `boolean_logic_gap`; `dpi_cascade`; `environment_issue`; `test_data` |
 | [TESTAUTOMA-8450](#testautoma-8450) | `boolean_logic_gap`; `environment_issue`; `test_data` |
-| [TESTAUTOMA-8814](#testautoma-8814) | `test_data`; `missing_wait`; `PROPOSED: hardcoded_coordinate_brittleness`; `PROPOSED: silent_parameter_typo` |
-| [TESTAUTOMA-8833](#testautoma-8833) | `test_data`; `environment_issue`; `PROPOSED: search_criteria_too_broad`; `PROPOSED: criteria_order_vs_scroll_direction` |
-| [TESTAUTOMA-8943](#testautoma-8943) | `missing_wait`; `text_label`; `image_staleness`; `PROPOSED: transient_render_state`; `silent_exception_swallowing`; `PROPOSED: false_pass_assertion` |
+| [TESTAUTOMA-8814](#testautoma-8814) | `test_data`; `missing_wait`; `hardcoded_coordinate_brittleness`; `silent_parameter_typo` |
+| [TESTAUTOMA-8833](#testautoma-8833) | `test_data`; `environment_issue`; `search_criteria_too_broad`; `criteria_order_vs_scroll_direction` |
+| [TESTAUTOMA-8943](#testautoma-8943) | `missing_wait`; `text_label`; `image_staleness`; `transient_render_state`; `silent_exception_swallowing`; `false_pass_assertion` |
 ## TESTAUTOMA-7947
 
 **Failing test:** TESTAUTOMA_6170_PartMasterWidgetPassTest.script
@@ -274,7 +274,7 @@ Multiple genuinely apply; forcing one would destroy the finding.
 | 2 — stale hardcoded dashboard URL | `config_value_stale` |
 | 3 — missing prerequisite template | `environment_issue` |
 | 4 — share unreachable from controller / wrong execution host | `environment_issue` |
-| 5 — "Access other apps" popup overlaying the target text | `PROPOSED: unhandled_popup_overlay` |
+| 5 — "Access other apps" popup overlaying the target text | `unhandled_popup_overlay` |
 
 **On blocker 5 — none of the twelve genuinely fits, so I am not forcing it.** It is not `search_rectangle` (the rectangle was correct), not `text_label` (the literal was correct), not `missing_wait` (three retries over ~6 minutes were performed — waiting longer would never help), not `image_staleness`, and not `environment_issue` in the actionable sense (it is fixed in-script, and recurs *by design* because of InPrivate). The distinguishing signature is: **a modal/interstitial occluding an element that is otherwise present and correctly targeted, appearing intermittently.** Routing it to any of the existing twelve would train the wrong repair — e.g. an agent tagging it `search_rectangle` would widen a rectangle that was never wrong, and one tagging it `missing_wait` would add waits that cannot help.
 
@@ -761,19 +761,21 @@ has no slot for "the app changed under a correct test."
 
 ### Failure family
 
-`text_label` · `environment_issue` · **`PROPOSED: change_scope`** — **`multi_cause: true`**
+`text_label` · `environment_issue` · **`change_scope`** — **`multi_cause: true`**
 
 - The mechanical fix was `text_label` (a label string was wrong). **But routing on `text_label`
   alone would have re-run exactly the R1–R4 flailing**, because the correct label is not discoverable
   by any label-fixing strategy. `text_label` describes the diff, not the problem.
-- `PROPOSED: change_scope` — "application changed, the test must be rewritten to the new workflow;
+- `change_scope` — "application changed, the test must be rewritten to the new workflow;
   the new workflow is not present in code, logs or screenshots." None of the twelve names this. The
   source document independently proposes exactly this: "Add 'change_scope' and 'environment_flake' as
-  first-class families in the router, and wire change_scope -> ask_human". The Jira ticket itself
+  first-class families in the router, and wire change_scope -> ask_human". *(Quoted verbatim. Both were
+  ratified on 2026-07-30 — `change_scope` under that name, and `environment_flake` under the name
+  **`transient_flake`**, which plan4 already used; see plan_master §3.)* The Jira ticket itself
   **carries the "Change Scope" label**, so this family is detectable *before* any diagnosis begins —
   which is the whole point of proposing it.
 - `environment_issue` — the R2 3DDashboard blocker (BST refresh moved the app off-screen).
-- **`PROPOSED: environment_flake`** — the R6 launch/login OCR flake. Distinct from
+- **`transient_flake`** — the R6 launch/login OCR flake. Distinct from
   `environment_issue` because nothing is broken and nothing should be fixed; the correct handling is
   to *tolerate* it. Also independently proposed by the source document.
 
@@ -1048,10 +1050,10 @@ non-visual oracle)."
 
 ### Failure family
 
-`missing_wait` · **`PROPOSED: flaky_oracle`** — **`multi_cause: true`**
+`missing_wait` · **`flaky_oracle`** — **`multi_cause: true`**
 
 - `missing_wait` — R1, the unrendered toolbar. Clean fit.
-- **`PROPOSED: flaky_oracle`** (the source document's own proposed name; it also calls it
+- **`flaky_oracle`** (the source document's own proposed name; it also calls it
   `ocr_fragility`) — "the check is reading a low-fidelity, transient surface when a deterministic
   source of truth exists; the fix is to change the *mechanism* of verification, not its parameters."
   **None of the twelve fits, and forcing it would mis-route badly:**
@@ -2133,13 +2135,13 @@ substance of what went wrong:
 
 Two things did not fit any of the twelve, and I am not forcing them:
 
-- `PROPOSED: hardcoded_coordinate_brittleness` — `tripleClick[137,172]` is a fixed *click* coordinate
+- `hardcoded_coordinate_brittleness` — `tripleClick[137,172]` is a fixed *click* coordinate
   calibrated to one specimen's rendered text width. `search_rectangle` is the nearest bucket but is
   materially different: nothing about a search rectangle was wrong, and tagging it that way would
   train an agent to go adjust rectangles when the correct remedy is to anchor the click to a located
   element. This pattern recurs (`tripleClick[106,75]`, `tripleClick(149,72)` elsewhere in the repo),
   so it deserves its own family.
-- `PROPOSED: silent_parameter_typo` — `watiFor:25` instead of `waitFor:25`. A misspelled *named
+- `silent_parameter_typo` — `watiFor:25` instead of `waitFor:25`. A misspelled *named
   parameter* that neither errors nor warns; the call silently runs without the intended option.
   `handler_name_mismatch` is about handler names, not parameter names, and would mis-route the fix.
 
@@ -2512,14 +2514,14 @@ script does, because there is nothing for `SDE-COS` to attempt to delete.
   on the refreshed BST.
 - `environment_issue` — the Edge `Access other apps and services on this device` prompt covering the
   Advanced Search panel on the refreshed environment.
-- `PROPOSED: search_criteria_too_broad` — the original ticket cause. The search returned a
+- `search_criteria_too_broad` — the original ticket cause. The search returned a
   superset containing a *different object type* that superficially matches (`Type = Part` also
   matching Part Master Physical Products), so the test operated on an object the assertion could
   never hold for. None of the twelve fits this: it is not a search rectangle, not a text label, not
   a stale config value — the criteria were valid and were found, they simply did not discriminate.
   Forcing it into `test_data` would be wrong, because the data was present and correct; the query
   was under-specified.
-- `PROPOSED: criteria_order_vs_scroll_direction` — a criteria list whose order does not match the
+- `criteria_order_vs_scroll_direction` — a criteria list whose order does not match the
   order the panel draws its fields is unreachable, because the traversal only scrolls one way. This
   presents as a not-found label, which makes it look like `text_label` or `missing_wait`, and both
   of those readings were tried and were wrong. It deserves its own name precisely because it
@@ -2916,9 +2918,9 @@ Two unresolved items are **not** script issues and should not be treated as such
 
 - `missing_wait` — the dominant one, three separate instances: no wait for the late-arriving alert; no wait for the panel to close after the alert clears; `readText` used as if it polled.
 - `text_label` — `"Create New MEP"` matched against an elided `Create New M...`.
-- `image_staleness` — applies with a caveat. The stored `icons/okButton` asset is **not** stale; it matched correctly twice in the same logs. The failure is that an image match false-negatives under transient render states (hover repaint, page dimming). If the family is meant strictly as "asset no longer resembles the UI", this is a poor fit and the honest tag would be `PROPOSED: transient_render_state` — an image that matches normally but not while hovered, dimmed, or otherwise mid-repaint.
+- `image_staleness` — applies with a caveat. The stored `icons/okButton` asset is **not** stale; it matched correctly twice in the same logs. The failure is that an image match false-negatives under transient render states (hover repaint, page dimming). If the family is meant strictly as "asset no longer resembles the UI", this is a poor fit and the honest tag would be `transient_render_state` — an image that matches normally but not while hovered, dimmed, or otherwise mid-repaint.
 
-Also present but not the reported failure: `silent_exception_swallowing` in spirit — `common.waitForTextToDisappear` reports success for text that was never present. It swallows no exception, so the tag is imprecise; `PROPOSED: false_pass_assertion` would describe it better.
+Also present but not the reported failure: `silent_exception_swallowing` in spirit — `common.waitForTextToDisappear` reports success for text that was never present. It swallows no exception, so the tag is imprecise; `false_pass_assertion` would describe it better.
 
 ### Handlers involved
 

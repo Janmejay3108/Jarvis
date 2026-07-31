@@ -251,7 +251,7 @@ Multiple genuinely apply; forcing one would destroy the finding.
 | 2 — stale hardcoded dashboard URL | `config_value_stale` |
 | 3 — missing prerequisite template | `environment_issue` |
 | 4 — share unreachable from controller / wrong execution host | `environment_issue` |
-| 5 — "Access other apps" popup overlaying the target text | `PROPOSED: unhandled_popup_overlay` |
+| 5 — "Access other apps" popup overlaying the target text | `unhandled_popup_overlay` |
 
 **On blocker 5 — none of the twelve genuinely fits, so I am not forcing it.** It is not `search_rectangle` (the rectangle was correct), not `text_label` (the literal was correct), not `missing_wait` (three retries over ~6 minutes were performed — waiting longer would never help), not `image_staleness`, and not `environment_issue` in the actionable sense (it is fixed in-script, and recurs *by design* because of InPrivate). The distinguishing signature is: **a modal/interstitial occluding an element that is otherwise present and correctly targeted, appearing intermittently.** Routing it to any of the existing twelve would train the wrong repair — e.g. an agent tagging it `search_rectangle` would widen a rectangle that was never wrong, and one tagging it `missing_wait` would add waits that cannot help.
 

@@ -294,13 +294,13 @@ substance of what went wrong:
 
 Two things did not fit any of the twelve, and I am not forcing them:
 
-- `PROPOSED: hardcoded_coordinate_brittleness` — `tripleClick[137,172]` is a fixed *click* coordinate
+- `hardcoded_coordinate_brittleness` — `tripleClick[137,172]` is a fixed *click* coordinate
   calibrated to one specimen's rendered text width. `search_rectangle` is the nearest bucket but is
   materially different: nothing about a search rectangle was wrong, and tagging it that way would
   train an agent to go adjust rectangles when the correct remedy is to anchor the click to a located
   element. This pattern recurs (`tripleClick[106,75]`, `tripleClick(149,72)` elsewhere in the repo),
   so it deserves its own family.
-- `PROPOSED: silent_parameter_typo` — `watiFor:25` instead of `waitFor:25`. A misspelled *named
+- `silent_parameter_typo` — `watiFor:25` instead of `waitFor:25`. A misspelled *named
   parameter* that neither errors nor warns; the call silently runs without the intended option.
   `handler_name_mismatch` is about handler names, not parameter names, and would mis-route the fix.
 

@@ -28,6 +28,9 @@ node_modules/
 **/node_modules/
 webapp/dist/
 
+# Local IDE / tooling state — machine-specific, never shared
+.claude/settings.local.json
+
 # OS noise
 Thumbs.db
 Desktop.ini

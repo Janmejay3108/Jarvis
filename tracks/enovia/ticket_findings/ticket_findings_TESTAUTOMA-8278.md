@@ -186,19 +186,21 @@ has no slot for "the app changed under a correct test."
 
 ### Failure family
 
-`text_label` · `environment_issue` · **`PROPOSED: change_scope`** — **`multi_cause: true`**
+`text_label` · `environment_issue` · **`change_scope`** — **`multi_cause: true`**
 
 - The mechanical fix was `text_label` (a label string was wrong). **But routing on `text_label`
   alone would have re-run exactly the R1–R4 flailing**, because the correct label is not discoverable
   by any label-fixing strategy. `text_label` describes the diff, not the problem.
-- `PROPOSED: change_scope` — "application changed, the test must be rewritten to the new workflow;
+- `change_scope` — "application changed, the test must be rewritten to the new workflow;
   the new workflow is not present in code, logs or screenshots." None of the twelve names this. The
   source document independently proposes exactly this: "Add 'change_scope' and 'environment_flake' as
-  first-class families in the router, and wire change_scope -> ask_human". The Jira ticket itself
+  first-class families in the router, and wire change_scope -> ask_human". *(Quoted verbatim. Both were
+  ratified on 2026-07-30 — `change_scope` under that name, and `environment_flake` under the name
+  **`transient_flake`**, which plan4 already used; see plan_master §3.)* The Jira ticket itself
   **carries the "Change Scope" label**, so this family is detectable *before* any diagnosis begins —
   which is the whole point of proposing it.
 - `environment_issue` — the R2 3DDashboard blocker (BST refresh moved the app off-screen).
-- **`PROPOSED: environment_flake`** — the R6 launch/login OCR flake. Distinct from
+- **`transient_flake`** — the R6 launch/login OCR flake. Distinct from
   `environment_issue` because nothing is broken and nothing should be fixed; the correct handling is
   to *tolerate* it. Also independently proposed by the source document.
 
