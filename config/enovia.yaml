@@ -1,0 +1,87 @@
+repo:
+  project: EGGAUTO
+  slug: enovia-plm-test-automation
+  branch: Testing_Mar10
+  local_path: data/working_copy/enovia-plm-test-automation
+  remotes:
+    origin: https://bitbucket.it.keysight.com/scm/eggauto/enovia-plm-test-automation.git
+    agentic-eggplant-automation: https://bitbucket.it.keysight.com/scm/eggauto/agentic-eggplant-automation.git
+
+suites:
+  - 3DDashboard
+  - BoundaryApps
+  - Common
+  - CustomReport
+  - EngineeringCentral
+  - EnoviaCommon
+  - LibraryCentral
+  - "M&AFoundational"
+  - MACS
+  - MaterialsComplianceCentral
+  - MSFIntegration
+  - PartMaster
+  - Performance
+  - PLMBridge
+  - Search
+  - SupplierCentral
+  - TeamCenter
+
+number_to_suite_ranges:
+  - start: 2864
+    end: 2950
+    suite: EngineeringCentral
+  - start: 2975
+    end: 2996
+    suite: Search
+  - start: "<TO BE PROVIDED>"
+    end: "<TO BE PROVIDED>"
+    suite: "<TO BE PROVIDED>"
+
+dai:
+  role: production_evidence_read_only
+  host: epcorpappsdai12
+  version: 25.3.1+0
+  base_url: "<TO BE PROVIDED>"
+  auth:
+    mode: oauth2_client_credentials
+    token_path: /auth/realms/eggplant/protocol/openid-connect/token
+    client_id: "<DAI_CLIENT_ID>"
+    client_secret: "<DAI_CLIENT_SECRET>"
+  endpoints:
+    log_by_runid: /ai/runlogs/{runid}
+    screenshot: /api/v2/screenshots/{image_id}
+  screenshot_selection:
+    error_entry_strategy: llm_semantic_match
+    walk_back_to_prior_image: true
+    image_id_field: image_id
+
+jarvis:                                     # the JARVIS validation gate - plan_master section 2.3
+  repo_url: "<JARVIS_REPO_URL>"             # agentic-eggplant-automation
+  branch: Enovia                            # force-push target for every validation cycle
+  dai_base_url: https://eggptdai10.cos.is.keysight.com:8000/   # JARVIS DAI 26.2.2 - NOT the production DAI
+  auth:                                     # v2 client-credentials; ~10-min bearer, cached + refreshed
+    mode: v2_client_credentials
+    token_path: /api/v2/auth
+    client_id: "<JARVIS_DAI_CLIENT_ID>"
+    client_secret: "<JARVIS_DAI_CLIENT_SECRET>"
+  completion_mode: poll_backoff             # day one; webhook is the upgrade path (O1)
+  poll_backoff: [15, 30, 60, 120]           # seconds; exponential, capped - never a flat interval
+  run_timeout: "<TO BE PROVIDED>"           # must cover the observed 20min-2hr range
+  suites_path: 'C:\Eggplant_Suites'         # JARVIS VM clone of the validation repo
+  test_config_registry: tracks/enovia/test_config_registry.yaml
+
+llm:
+  model: claude-opus-4-7
+  anthropic_base_url: "<ANTHROPIC_BASE_URL>"
+  api_key: "<ANTHROPIC_API_KEY>"
+  model_light: "<MODEL_LIGHT>"
+  engine_mode: agentic
+  thinking_on_escalation: true
+
+validation:
+  mechanism: jarvis-dai
+  max_attempts: 3
+  n_best_on_retry: 2
+
+approval_mode: manual
+budget_usd_per_run: 10.0

@@ -80,3 +80,7 @@ Gate 0a passes on **PoC 2 + PoC 5 + the JARVIS validation path (2b + A.2b)** —
 before plan3 §3.2. **PoC 7**'s decision rule is **retired** on the evidence of 10–12 manually executed
 tickets; **A.10a** (suite-frequency count) is scheduled and **A.10b** (the ≥50 labelled set) is carried
 as **O8** against Gate 1. **Phase 0.B may begin.** *(Ruled by Jay, 2026-07-28 / 2026-07-29.)*
+
+[x] plan0/0.B/B.1 — 2026-08-02 — repo bootstrap: tree per master §4, pyproject (name=jarvis),
+    config/enovia.yaml skeleton, .env.example. Repo-side actions (remote, default branch,
+    approval rule, PAT) deferred per B.1 action 1.

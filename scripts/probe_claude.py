@@ -13,7 +13,7 @@ several times; you will see PASS and FAIL responses with the same key.
 import json
 import os
 
-from anthropic import Anthropic
+from anthropic import Anthropic, AnthropicError
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -72,7 +72,7 @@ try:
     print("model      : claude-opus-4-7")
     print("tool_input :", tool_input)
     print("usage      :", resp.usage.input_tokens + resp.usage.output_tokens, "tokens")
-except Exception as e:
+except AnthropicError as e:
     print("RESULT     : FAIL")
     print("provider   : Anthropic (Keysight gateway)")
     print("model      : claude-opus-4-7")
