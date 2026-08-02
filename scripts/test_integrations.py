@@ -256,6 +256,8 @@ def _identifier(payload: object) -> str | None:
 	value = _find_value(
 		payload,
 		(
+			"task_instance_id",
+			"taskInstanceId",
 			"test_config_result_id",
 			"testConfigResultId",
 			"test_result_id",
