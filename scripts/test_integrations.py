@@ -335,7 +335,7 @@ class _JarvisDaiSmokeClient:
 	async def trigger(self, test_config_id: str) -> str:
 		response = await self.request(
 			"POST",
-			f"/api/v2/testconfiguration/{test_config_id}/run",
+			f"/task_scheduler_service/api/v1/task_instances/{test_config_id}",
 		)
 		trigger_id = _identifier(response.json())
 		_require(trigger_id, "Trigger response contained no run or execution ID")
