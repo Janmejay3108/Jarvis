@@ -380,7 +380,7 @@ def _authenticated_git_url() -> str:
 		host = f"{host}:{parsed.port}"
 	token = quote(settings.jarvis_pat.get_secret_value(), safe="")
 	return urlunsplit(
-		(parsed.scheme, f"x-token-auth:{token}@{host}", parsed.path, "", "")
+		(parsed.scheme, f"{token}@{host}", parsed.path, "", "")
 	)
 
 
