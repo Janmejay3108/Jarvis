@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 if TYPE_CHECKING:
@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 
 class LogEntry(BaseModel):
     """Single DAI run log entry."""
+
+    model_config = ConfigDict(coerce_numbers_to_str=True)
 
     id: str | None = None
     eventtime: str | None = None

@@ -37,7 +37,12 @@ async def test_dai_log_by_runid_parses_entries(httpx_mock: HTTPXMock) -> None:
         method="GET",
         url="http://dai.test:8000/ai/runlogs/30832",
         json=[
-            {"id": "1", "message": "started", "image_id": "image-1"},
+            {
+                "id": 1,
+                "testrunid": 30832,
+                "message": "started",
+                "image_id": "image-1",
+            },
             {"id": "2", "message": "failed", "severity": "ERROR"},
         ],
     )
@@ -46,7 +51,12 @@ async def test_dai_log_by_runid_parses_entries(httpx_mock: HTTPXMock) -> None:
         logs = await client.log_by_runid("30832")
 
     assert logs == [
-        LogEntry(id="1", message="started", image_id="image-1"),
+        LogEntry(
+            id="1",
+            testrunid="30832",
+            message="started",
+            image_id="image-1",
+        ),
         LogEntry(id="2", message="failed", severity="ERROR"),
     ]
 
