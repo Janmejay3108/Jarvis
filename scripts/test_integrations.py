@@ -297,15 +297,15 @@ class _JarvisDaiSmokeClient:
 		response = await self._client.post(
 			"/api/v2/auth",
 			json={
-				"clientId": settings.jarvis_dai_client_id.get_secret_value(),
-				"clientSecret": settings.jarvis_dai_client_secret.get_secret_value(),
+				"client_id": settings.jarvis_dai_client_id.get_secret_value(),
+				"client_secret": settings.jarvis_dai_client_secret.get_secret_value(),
 			},
 		)
 		response.raise_for_status()
 		payload = response.json()
-		token = payload.get("token")
+		token = payload.get("access_token")
 		_require(isinstance(token, str) and token, "JARVIS auth returned no token")
-		expires_in = float(payload.get("expiresIn", payload.get("expires_in", 570)))
+		expires_in = float(payload.get("expires_in", 570))
 		self._token = token
 		self._token_expires_at = time.monotonic() + max(30.0, expires_in - 30.0)
 		return token
