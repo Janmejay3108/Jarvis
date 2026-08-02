@@ -287,9 +287,9 @@ Two unresolved items are **not** script issues and should not be treated as such
 
 - `missing_wait` — the dominant one, three separate instances: no wait for the late-arriving alert; no wait for the panel to close after the alert clears; `readText` used as if it polled.
 - `text_label` — `"Create New MEP"` matched against an elided `Create New M...`.
-- `image_staleness` — applies with a caveat. The stored `icons/okButton` asset is **not** stale; it matched correctly twice in the same logs. The failure is that an image match false-negatives under transient render states (hover repaint, page dimming). If the family is meant strictly as "asset no longer resembles the UI", this is a poor fit and the honest tag would be `PROPOSED: transient_render_state` — an image that matches normally but not while hovered, dimmed, or otherwise mid-repaint.
+- `image_staleness` — applies with a caveat. The stored `icons/okButton` asset is **not** stale; it matched correctly twice in the same logs. The failure is that an image match false-negatives under transient render states (hover repaint, page dimming). If the family is meant strictly as "asset no longer resembles the UI", this is a poor fit and the honest tag would be `transient_render_state` — an image that matches normally but not while hovered, dimmed, or otherwise mid-repaint.
 
-Also present but not the reported failure: `silent_exception_swallowing` in spirit — `common.waitForTextToDisappear` reports success for text that was never present. It swallows no exception, so the tag is imprecise; `PROPOSED: false_pass_assertion` would describe it better.
+Also present but not the reported failure: `silent_exception_swallowing` in spirit — `common.waitForTextToDisappear` reports success for text that was never present. It swallows no exception, so the tag is imprecise; `false_pass_assertion` would describe it better.
 
 ### Handlers involved
 

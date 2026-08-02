@@ -6,6 +6,13 @@
 # Every push regenerates the dispatcher for EVERY suite listed here (F8 / decision O6), so the
 # Enovia branch is always complete.  A suite with no `smoke_target` is therefore a HARD ERROR at
 # onboarding time — never a silent failure at validation time.
+#
+# JIRA-NUMBER RANGES CONFIRMED LIVE (2026-07-30).  EngineeringCentral's smoke_target
+# TESTAUTOMA_2941_... falls inside the 2864-2950 -> EngineeringCentral range in
+# config/enovia.yaml.  This is the FIRST live confirmation that those ranges are real, and it
+# matters because the ranges are BRANCH 2 of validation_suite_of (plan2 §2.5.0): when the DAI log
+# does not name the failing test, the range is what resolves the suite.  Until now that branch was
+# specified but never observed to hold.
 version: 1
 
 suites:

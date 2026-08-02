@@ -4,29 +4,31 @@
 # ============================================================================
 
 # Secrets — never commit
-.env
 **/.env
 **/.env.local
-*.pem
-*.key
+**/*.pem
+**/*.key
 
 # Python
-.venv/
 **/.venv/
-__pycache__/
 **/__pycache__/
-*.pyc
-*.pyo
+**/.pytest_cache/
+**/*.egg-info/
+**/*.pyc
+**/*.pyo
 
 # Data / artifacts (gitignored per plan_master §4)
-data/
-**/data/
-*.log
+**/data/**
+!**/data/**/
+!**/data/**/.gitkeep
+**/*.log
 
 # Node / webapp (later phases, created by plan0 B.1)
-node_modules/
 **/node_modules/
-webapp/dist/
+**/webapp/dist/
+
+# Local IDE / tooling state — machine-specific, never shared
+.claude/settings.local.json
 
 # OS noise
 Thumbs.db

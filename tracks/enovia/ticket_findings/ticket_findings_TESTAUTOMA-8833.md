@@ -271,14 +271,14 @@ script does, because there is nothing for `SDE-COS` to attempt to delete.
   on the refreshed BST.
 - `environment_issue` — the Edge `Access other apps and services on this device` prompt covering the
   Advanced Search panel on the refreshed environment.
-- `PROPOSED: search_criteria_too_broad` — the original ticket cause. The search returned a
+- `search_criteria_too_broad` — the original ticket cause. The search returned a
   superset containing a *different object type* that superficially matches (`Type = Part` also
   matching Part Master Physical Products), so the test operated on an object the assertion could
   never hold for. None of the twelve fits this: it is not a search rectangle, not a text label, not
   a stale config value — the criteria were valid and were found, they simply did not discriminate.
   Forcing it into `test_data` would be wrong, because the data was present and correct; the query
   was under-specified.
-- `PROPOSED: criteria_order_vs_scroll_direction` — a criteria list whose order does not match the
+- `criteria_order_vs_scroll_direction` — a criteria list whose order does not match the
   order the panel draws its fields is unreachable, because the traversal only scrolls one way. This
   presents as a not-found label, which makes it look like `text_label` or `missing_wait`, and both
   of those readings were tried and were wrong. It deserves its own name precisely because it

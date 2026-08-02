@@ -58,17 +58,29 @@
 ### Step 4.1.1 — `src/analysis/triage.py`
 `TriageGate.classify(ticket_text, log_entries, matched_error_entry, screenshot_path?) -> TriageResult {route: autofix|diagnose_only|ask_human, family, confidence: HIGH|MEDIUM|LOW, signals[], evidence[], reasoning}`.
 - **Layer 1 — deterministic rules (zero cost, run first):** `STInvalidBoolean`/syntax/handler-not-found → code family; `"not allowed for spirent Part"` / trigger #1500167 → `test_data`; server/login unreachable, 3DSPACE nodes down, license errors → `environment_issue`/infra; Jira issue type or label "Change Scope" → `change_scope`; failing step ∈ `flake_allowlist` → `transient_flake`.
+  **Every family these rules emit is a defined member of plan_master §3's canonical 22** — `change_scope` and `transient_flake` included. They are **not ad-hoc**, and `Diagnosis.category` (plan1 §1.4.2) accepts them.
+  **Additional deterministic rules for the statically-detectable new families** — each is decidable from source alone, so it belongs in Layer 1 rather than costing an LLM call:
+  - named parameter not matching the callee's declared parameter names (`watiFor` vs `waitFor`) → **`silent_parameter_typo`**;
+  - `waitForTextToDisappear` (or equivalent) with no preceding presence check on the same text → **`false_pass_assertion`**;
+  - literal coordinate pair passed to a click-family command (`tripleClick[137,172]`) → **`hardcoded_coordinate_brittleness`** *(advisory — some are legitimate)*;
+  - advanced-search criteria ordered against the panel's documented draw order → **`criteria_order_vs_scroll_direction`** *(advisory — the documented order may be incomplete)*.
+
+  These four are the **same predicates Tier-0 lint already computes** (plan2 §2.3), so Layer 1 reads the lint result rather than re-deriving it.
 - **Layer 2 — one forced-tool LLM call** (`settings.model`) with compacted log + delimited ticket text + the screenshot when the failure is a UI/text lookup; same output schema.
 - **Routing table:** `family ∈ triage.fixable_families ∧ confidence ≥ min_confidence_for_autofix` → `autofix`; environment / test_data / infra / application_bug → `diagnose_only`; change_scope → `ask_human`; LOW confidence anywhere → `ask_human` (one question) or `diagnose_only` — **never guess-and-patch**. Encode the rationale as a code comment: a false "fix it" burns SUT hours and trust; a false "escalate" costs a human a look they'd have taken anyway.
 - Config (add to `config/enovia.yaml`):
 ```yaml
 triage:
   fixable_families: [boolean_logic_gap, silent_exception_swallowing, search_rectangle,
-                     dpi_cascade, text_label, missing_wait, handler_name_mismatch,
-                     config_value_stale, flaky_oracle]
+                     dpi_cascade, text_label, missing_wait, image_staleness,
+                     handler_name_mismatch, config_value_stale, flaky_oracle,
+                     unhandled_popup_overlay, hardcoded_coordinate_brittleness,
+                     silent_parameter_typo, transient_render_state, false_pass_assertion,
+                     search_criteria_too_broad, criteria_order_vs_scroll_direction]
   min_confidence_for_autofix: MEDIUM
 ```
-- New families registered alongside the existing list: `flaky_oracle` (OCR-of-transient-UI validation; 8448), `change_scope` (app redesign needing new product knowledge; 8278), `transient_flake` (known-flaky infra step).
+  *This is the **autofix-eligible 17** of plan_master §3's canonical 22. The remaining five — `environment_issue`, `test_data`, `application_bug`, `change_scope`, `transient_flake` — are defined families that route elsewhere, which is precisely why they are defined. **`min_confidence_for_autofix` and every threshold in this plan are unchanged.***
+- **The families are defined in plan_master §3, not here.** `flaky_oracle` (OCR-of-transient-UI validation; 8448), `change_scope` (app redesign needing new product knowledge; 8278) and `transient_flake` (known-flaky infra step) were first *used* by this plan and are now *defined* there, alongside the seven added from the nine solved-ticket records. Enumerate from §3; never maintain a second copy.
 
 ### Step 4.1.2 — Pipeline insertion + run-model extension
 Modify the pipeline built in plan1 §1.1.2: insert `triaging` between `fetch_logs` and `localize`; branch on `TriageResult.route` —
