@@ -2,7 +2,7 @@
 name: Architect
 description: Plan, research, and write build briefs for JARVIS. Never writes JARVIS code.
 argument-hint: Describe the step to plan, or ask a design question
-model: Claude Opus 5
+model: GPT-5.6 Sol
 tools: ['search/codebase', 'search/usages', 'web/fetch', 'web/search', 'edit', 'runCommands']
 handoffs:
   - label: Build this

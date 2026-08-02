@@ -2,7 +2,7 @@
 name: Builder
 description: Execute a build brief. Writes JARVIS source, scripts, and tests on a branch.
 argument-hint: Paste the brief, or point at a file under docs/agent/briefs/
-model: Claude Opus 5
+model: GPT-5.6 Sol
 handoffs:
   - label: Review this
     agent: Reviewer
