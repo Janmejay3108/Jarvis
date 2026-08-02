@@ -72,7 +72,7 @@ class JarvisConfig(BaseModel):
     auth: AuthConfig
     completion_mode: str
     poll_backoff: list[int]
-    run_timeout: ProvidedString
+    run_timeout: int
     suites_path: str
     test_config_registry: str
 
@@ -99,8 +99,8 @@ class ValidationConfig(BaseModel):
 class NumberToSuiteRange(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    start: int | ProvidedString
-    end: int | ProvidedString
+    start: int
+    end: int
     suite: ProvidedString
 
 
