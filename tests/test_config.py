@@ -19,32 +19,28 @@ def test_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert configured.anthropic_api_key.get_secret_value() == "test-api-key"
 
 
-def test_track_loader_rejects_unresolved_values() -> None:
-    with pytest.raises(ValidationError, match="TO BE PROVIDED"):
-        load_track()
-
-
-def test_track_loader(tmp_path: Path) -> None:
-    source = Path("config/enovia.yaml")
-    raw_config = yaml.safe_load(source.read_text(encoding="utf-8"))
-    raw_config["number_to_suite_ranges"] = [
-        item
-        for item in raw_config["number_to_suite_ranges"]
-        if item["start"] != "<TO BE PROVIDED>"
-    ]
-    raw_config["dai"]["base_url"] = "https://production-dai.example.test"
-    raw_config["jarvis"]["run_timeout"] = "7200"
-
-    resolved_config = tmp_path / "enovia.yaml"
-    resolved_config.write_text(
+def test_track_loader_rejects_unresolved_values(tmp_path: Path) -> None:
+    raw_config = yaml.safe_load(
+        Path("config/enovia.yaml").read_text(encoding="utf-8")
+    )
+    raw_config["dai"]["base_url"] = "<TO BE PROVIDED>"
+    unresolved_config = tmp_path / "unresolved.yaml"
+    unresolved_config.write_text(
         yaml.safe_dump(raw_config, sort_keys=False),
         encoding="utf-8",
     )
 
-    track = load_track(str(resolved_config))
+    with pytest.raises(ValidationError, match="TO BE PROVIDED"):
+        load_track(str(unresolved_config))
+
+
+def test_track_loader() -> None:
+    track = load_track()
 
     assert len(track.suites) == 17
     assert track.jarvis.branch == "Enovia"
+    assert track.jarvis.run_timeout == 7200
+    assert track.dai.base_url == "http://epcorpappsdai12.cos.is.keysight.com:8000"
     assert track.validation.max_attempts == 3
 
 

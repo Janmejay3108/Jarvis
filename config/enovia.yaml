@@ -33,15 +33,12 @@ number_to_suite_ranges:
   - start: 2975
     end: 2996
     suite: Search
-  - start: "<TO BE PROVIDED>"
-    end: "<TO BE PROVIDED>"
-    suite: "<TO BE PROVIDED>"
 
 dai:
   role: production_evidence_read_only
   host: epcorpappsdai12
   version: 25.3.1+0
-  base_url: "<TO BE PROVIDED>"
+  base_url: http://epcorpappsdai12.cos.is.keysight.com:8000
   auth:
     mode: oauth2_client_credentials
     token_path: /auth/realms/eggplant/protocol/openid-connect/token
@@ -66,7 +63,7 @@ jarvis:                                     # the JARVIS validation gate - plan_
     client_secret: "<JARVIS_DAI_CLIENT_SECRET>"
   completion_mode: poll_backoff             # day one; webhook is the upgrade path (O1)
   poll_backoff: [15, 30, 60, 120]           # seconds; exponential, capped - never a flat interval
-  run_timeout: "<TO BE PROVIDED>"           # must cover the observed 20min-2hr range
+  run_timeout: 7200                         # seconds; observed upper bound is 2 hours
   suites_path: 'C:\Eggplant_Suites'         # JARVIS VM clone of the validation repo
   test_config_registry: tracks/enovia/test_config_registry.yaml
 
