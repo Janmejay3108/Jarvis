@@ -170,9 +170,14 @@ class StateStore:
 		ticket_key: str,
 		track_id: str,
 		mode: str,
-		conversation_id: str,
+		conversation_id: str | None,
+		*,
+		run_id: str | None = None,
+		status: str = "queued",
+		created_at: str | None = None,
 	) -> str:
-		run_id = _id()
+		stored_run_id = run_id if run_id is not None else _id()
+		stored_created_at = created_at if created_at is not None else _now()
 		async with aiosqlite.connect(self.db_path) as db:
 			await db.execute(
 				"""
@@ -183,18 +188,18 @@ class StateStore:
 				) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, 0, 0.0, ?)
 				""",
 				(
-					run_id,
+					stored_run_id,
 					ticket_key,
 					track_id,
 					mode,
-					"queued",
+					status,
 					conversation_id,
-					_now(),
+					stored_created_at,
 					"{}",
 				),
 			)
 			await db.commit()
-		return run_id
+		return stored_run_id
 
 	async def update_run(self, run_id: str, **fields: Any) -> None:
 		if not fields:
@@ -228,12 +233,15 @@ class StateStore:
 		name: str,
 		status: str = "started",
 		detail: str = "",
+		*,
+		started_at: str | None = None,
 	) -> str:
 		step_id = _id()
+		stored_started_at = started_at if started_at is not None else _now()
 		async with aiosqlite.connect(self.db_path) as db:
 			await db.execute(
 				"INSERT INTO run_steps VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
-				(step_id, run_id, name, status, _now(), detail, ""),
+				(step_id, run_id, name, status, stored_started_at, detail, ""),
 			)
 			await db.commit()
 		return step_id
@@ -243,15 +251,23 @@ class StateStore:
 		step_id: str,
 		status: str = "completed",
 		error: str = "",
+		*,
+		completed_at: str | None = None,
+		detail: str | None = None,
 	) -> None:
+		assignments = ["status = ?", "completed_at = ?", "error = ?"]
+		values = [
+			status,
+			completed_at if completed_at is not None else _now(),
+			error,
+		]
+		if detail is not None:
+			assignments.append("detail = ?")
+			values.append(detail)
 		async with aiosqlite.connect(self.db_path) as db:
 			await db.execute(
-				"""
-				UPDATE run_steps
-				SET status = ?, completed_at = ?, error = ?
-				WHERE id = ?
-				""",
-				(status, _now(), error, step_id),
+				f"UPDATE run_steps SET {', '.join(assignments)} WHERE id = ?",
+				(*values, step_id),
 			)
 			await db.commit()
 
