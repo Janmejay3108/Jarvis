@@ -35,7 +35,14 @@ read_ticket (+ runid) → fetch_logs → localize → analyze → post_diagnosis
 ## Phase 1.2 — Integration clients — *Owner: Agent (live smokes: (User))*
 
 ### Step 1.2.1 — `jira_client.py` (DC REST v2)
-Async httpx, PAT bearer. `get_ticket(key)`, `post_comment(key, body)` (plain/wiki body), `add_label(key, label)` (`update.labels[{add}]`), `add_attachment(key, filename, bytes, mime)` (header `X-Atlassian-Token: no-check`), `transitions(key)`, `transition(key, name)` (best-effort). `tenacity` retry (3x, expo backoff) on 5xx/timeouts.
+Async httpx, PAT bearer. `get_ticket(key)`, `post_comment(key, body)` (plain/wiki body), `add_label(key, label)` (`update.labels[{add}]`), `add_attachment(key, filename, bytes, mime)` (header `X-Atlassian-Token: no-check`, returns the attachment **array**), `transitions(key)`, `transition(key, name)` (best-effort).
+**Retry boundary — reads only** (`docs/agent/decisions/003-jira-write-retry-boundary.md`). DC REST v2 has no idempotency key, so a blanket retry can duplicate a comment/attachment or advance a workflow twice.
+- **Reads** (`get_ticket`, `transitions`): `tenacity` retry **3× with exponential backoff** on `httpx.TimeoutException` and HTTP **5xx**.
+- **Writes** (`post_comment`, `add_label`, `add_attachment`, the transition POST): **exactly one attempt, never auto-retried.**
+- A write timeout/5xx raises a typed, **redacted** `JiraWriteUncertain(operation, ticket_key)` — the write MAY have succeeded. A write **4xx** stays an ordinary `httpx.HTTPStatusError` (definite failure).
+- An unavailable named transition remains a best-effort no-op with a structured warning — that is *not* an uncertain write.
+- The client is a **transport boundary only**: it owns no persistence, reconciliation policy, routes, or UI (those are Step 1.1.2 / 1.5.3 / 1.6.2).
+**DoD:** reads prove 3 attempts; each write proves exactly 1 request; the uncertain-write error carries no PAT, body, attachment bytes, MIME, authenticated URL, or raw response text.
 
 ### Step 1.2.2 — `bitbucket_client.py` (Server/DC REST 1.0, read-only this phase)
 `read_file(path, at)` via `/raw/{path}?at=`, `list_files(path, at)` with `isLastPage/nextPageStart` pagination. Project `EGGAUTO`, slug `enovia-plm-test-automation` from config.
