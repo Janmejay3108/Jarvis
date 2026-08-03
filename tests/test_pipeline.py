@@ -178,11 +178,18 @@ class RecordingDiagnoser:
 
 
 class RecordingFormatter:
-    def __init__(self, calls: list[str]) -> None:
+    def __init__(
+        self,
+        calls: list[str],
+        error: BaseException | None = None,
+    ) -> None:
         self.calls = calls
+        self.error = error
 
     def __call__(self, diagnosis: dict[str, Any], ticket_key: str) -> str:
         self.calls.append(f"formatter:{ticket_key}")
+        if self.error is not None:
+            raise self.error
         return f"Diagnosis: {diagnosis['root_cause']}"
 
 
@@ -226,6 +233,7 @@ async def _harness(
     jira_writes_enabled: bool = True,
     localizer_error: BaseException | None = None,
     diagnoser_error: BaseException | None = None,
+    formatter_error: BaseException | None = None,
     comment_error: BaseException | None = None,
     label_error: BaseException | None = None,
     extractor_must_be_skipped: bool = False,
@@ -306,7 +314,7 @@ async def _harness(
         ),
         diagnoser_error,
     )
-    formatter = RecordingFormatter(calls)
+    formatter = RecordingFormatter(calls, formatter_error)
     pipeline = DiagnosisPipeline(
         state_store=store,
         event_bus=bus,
@@ -524,6 +532,66 @@ async def test_definite_comment_failure_does_not_block_label_or_fail_run(
     ]
     assert "step.failed" not in event_types
     assert "run.failed" not in event_types
+
+
+@pytest.mark.asyncio
+async def test_formatter_failure_precedes_comment_attempt_and_keeps_run_successful(
+    tmp_path: Path,
+) -> None:
+    harness = await _harness(
+        tmp_path,
+        formatter_error=RuntimeError("formatter failed"),
+    )
+
+    result = await harness.pipeline.execute(harness.run)
+
+    actions = await harness.store.list_jira_actions(result.run_id)
+    assert [action["operation"] for action in actions] == [
+        "post_comment",
+        "add_label",
+    ]
+    assert [action["state"] for action in actions] == ["failed", "succeeded"]
+    assert [action["attempts"] for action in actions] == [0, 1]
+    assert not any(call.startswith("jira.post_comment:") for call in harness.calls)
+    assert sum(call.startswith("jira.add_label:") for call in harness.calls) == 1
+    assert result.status is RunStatus.completed
+
+    post_step = (await harness.store.list_steps(result.run_id))[-1]
+    assert post_step["status"] == "completed"
+    assert post_step["detail"] == (
+        "Diagnosis completed; Jira publication needs attention: "
+        "post_comment=failed, add_label=succeeded"
+    )
+    persisted = await harness.store.list_events(result.run_id)
+    event_types = [event["type"] for event in persisted]
+    assert "step.failed" not in event_types
+    assert "run.failed" not in event_types
+    action_events = [
+        event for event in persisted if event["type"] == "jira.action.updated"
+    ]
+    assert all(
+        set(event["payload"])
+        == {
+            "action_id",
+            "operation",
+            "state",
+            "check_result",
+            "attempts",
+            "created_at",
+            "updated_at",
+        }
+        for event in action_events
+    )
+
+    reopened = StateStore(harness.store.db_path)
+    await reopened.initialize()
+    assert await reopened.list_jira_actions(result.run_id) == actions
+    stream = EventBus(reopened).subscribe(result.run_id)
+    replayed = [await anext(stream) for _event in persisted]
+    await stream.aclose()
+    assert [event.payload for event in replayed if event.type == "jira.action.updated"] == [
+        event["payload"] for event in action_events
+    ]
 
 
 @pytest.mark.asyncio
