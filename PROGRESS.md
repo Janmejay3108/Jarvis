@@ -87,3 +87,4 @@ as **O8** against Gate 1. **Phase 0.B may begin.** *(Ruled by Jay, 2026-07-28 / 
 [x] plan1/1.1/1.1.1 — 2026-08-03 — Run and step lifecycle models landed with persisted EventBus
     transitions and durable step-detail semantics; 51 tests passed, 2 skipped, and Ruff clean.
 [x] plan1/1.1/1.1.2 — 2026-08-03 — Diagnosis pipeline landed with reliable-provenance evidence framing and instruction separation; 79 tests passed, 2 skipped, and Ruff clean.
+[x] plan1/1.1/1.1.3 — 2026-08-03 — Per-track FIFO diagnosis queues and native cross-process validation locks landed; 95 tests passed, 2 skipped, and Ruff clean.
