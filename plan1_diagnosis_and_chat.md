@@ -22,8 +22,16 @@ read_ticket (+ runid) → fetch_logs → localize → analyze → post_diagnosis
 - `localize`: primary signal = the **failing script/suite named in the DAI log**; fallback = `_locate_test(ticket)` (number→suite ranges from `context.md` + Bitbucket `list_files("Enovia/{suite}/Scripts/TestCases", branch)` matching `TESTAUTOMA_{num}`); read test source **from the local working copy**; `build_call_chain`; fetch every handler file in the chain; compute `blast_radius` via ripgrep for candidate handlers.
 - `analyze`: call `DiagnosisEngine.diagnose(run)` (Phase 1.4); accumulate tokens/cost; abort gracefully if `BudgetGuard` trips [UP-13].
 - `post_diagnosis`: `jira.post_comment(format_for_jira(diag))` + `jira.add_label("ai-diagnosed")` — **only when `settings.jira_writes_enabled`** (default true; eval runs set false).
+  **Jira publication is a side effect, not the diagnosis** (`docs/agent/decisions/004-jira-action-reconciliation.md`). A successful diagnosis stays a **successful run** even when publication fails or is uncertain — a Jira outage must never be reported as a failed diagnosis.
+  - **Each write is attempted independently.** A failed comment must NOT prevent the `ai-diagnosed` label attempt (the label is the reliable signal — `docs/context.md` §9.3, plan3 §3.3), and vice versa.
+  - Jira failure is **not** signalled with `step.failed` — that event terminalizes the run. The `post_diagnosis` step **completes**, with a detail stating whether publication succeeded or needs attention.
+  - **Schema addition** (a migration on plan0 §B.6's store, *not* a new store): `jira_actions(action_id, run_id, ticket_key, operation, intent_json, state, check_result, attempts, created_at, updated_at)`. `state ∈ pending|succeeded|failed|uncertain|reconciled`; `check_result ∈ present|absent|unknown`. Written **before** the request is issued, so a crash mid-write still leaves a record.
+  - **Never persist** PAT, authenticated URL, attachment bytes, or raw transport/response text. Attachments (plan3) store an artifact reference plus safe metadata.
+  - Each state change publishes the `jira.action.updated` event (master §5.2), so SSE replay renders the same state after a browser or process restart.
+  - The diagnosis comment carries its `action_id` in an inspectable JARVIS footer, so a later comment-list read can reconcile it. Label reconciliation reads the issue's exact label set.
+  - **No automatic retry, ever** — not on reload, reconnect, restart, or queue recovery. Recovery is the explicit user action in Step 1.5.3.
 - Every transition publishes `agent.message` narration (short human sentence) + `artifact` events (`diagnosis` JSON at the end). Wrap the whole run in try/except → `run.failed` event with the error, never a silent crash.
-**DoD:** mocked end-to-end unit test asserts step order, emitted event sequence, and persisted run row.
+**DoD:** mocked end-to-end unit test asserts step order, emitted event sequence, and persisted run row; **plus: a failing/uncertain Jira write leaves the run `completed`, still attempts the other write, persists the action row, emits `jira.action.updated`, and triggers no second request.**
 
 ### Step 1.1.3 — Queue + locks (`src/orchestrator/queue.py`, `locks.py`)
 - `locks.py`: per-track asyncio lock + a cross-process file lock (the SUT serializer; one validation at a time — used from plan2 but built now).
