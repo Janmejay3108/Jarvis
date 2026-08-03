@@ -157,8 +157,12 @@ OIDC via `authlib` against Keysight SSO (or trusted reverse-proxy header mode �
 
 ### Step 1.5.3 — Routes (`src/api/routes_chat.py`, `routes_runs.py`, `routes_sse.py`)
 Implement master §5.1 exactly: `POST /api/chat/messages` (persist user msg → intent → enqueue run → persist assistant ack with `run_id` → respond), `GET /api/conversations[/{id}]`, `GET /api/runs/{run_id}/stream` (SSE: **replay persisted events first, then live** from the bus — reconnect-safe via `Last-Event-ID`), `POST /api/runs/{id}/cancel` (cooperative flag the pipeline checks between steps). `src/main.py`: FastAPI app, CORS for dev, structlog middleware, mounts, and `StaticFiles(directory="webapp/dist", html=True)`.
-**Verification:** httpx-based API tests: message → run → SSE replay+live ordering; unauthenticated → 401.
-**DoD:** chat backend green on tests; SSE survives client reconnect mid-run.
+**Jira action recovery routes** (SSO-gated like every `/api/*`; `docs/agent/decisions/004-jira-action-reconciliation.md`): `GET /api/runs/{run_id}/jira_actions`, `POST /api/runs/{run_id}/jira_actions/{action_id}/check`, `POST /api/runs/{run_id}/jira_actions/{action_id}/retry {confirm: true}`.
+- **`check` is read-only** — an operation-specific reconciliation read (comment list matched on the `action_id` footer; the issue's exact label set). It records `present|absent|unknown` and never writes.
+- **`retry` is action-scoped and explicit.** It re-attempts **one** operation, never the run or the diagnosis. An `uncertain` action **must** be checked first: `present` → mark `reconciled` **without** a second write; `absent` → retry permitted; `unknown` → stays uncertain, manual handling. A **definite** failure may retry without a check.
+- Every check and retry updates the `jira_actions` row and emits an auditable `jira.action.updated`. **Nothing retries automatically** on reload, reconnect, restart, or queue recovery.
+**Verification:** httpx-based API tests: message → run → SSE replay+live ordering; unauthenticated → 401; **unauthenticated check/retry → 401; `check` issues no write; an uncertain action cannot be retried before a check; `present` reconciles without a second write; a confirmed retry issues exactly one request and emits the event.**
+**DoD:** chat backend green on tests; SSE survives client reconnect mid-run; **a failed/uncertain Jira action is recoverable only by explicit, audited user action.**
 
 ---
 
@@ -172,6 +176,7 @@ Vite + React + TypeScript + Tailwind. Layout: left sidebar (conversation list + 
 - `RunCard` — embedded in the assistant turn: ticket header, **live step timeline** (per `step.*` events: spinner/✓/✗ + detail + duration), running cost badge (`cost_usd_so_far`).
 - `ToolCallCard` — collapsible per `tool.called`/`tool.result` ("🔍 read_script CommonEnovia.script L380–440").
 - `ArtifactCard` — by `payload.kind`: `diagnosis` (structured viewer: root cause, category chip, confidence chip, evidence list, suggested fix, blast radius), `screenshot` (thumbnail → lightbox; served via `GET /api/runs/{id}/artifacts/{name}` — add this small authenticated file route), `log_excerpt` (mono block).
+- `JiraActionCard` — driven by `jira.action.updated` (`docs/agent/decisions/004-jira-action-reconciliation.md`). Renders each Jira action's operation and state (`pending|succeeded|failed|uncertain|reconciled`). **Because it is rebuilt from replayed events, reopening the conversation after a browser or process restart shows exactly which Jira operation failed.** A successful diagnosis whose publication failed reads as *"diagnosis completed · Jira publication needs attention"* — never as a failed run. Offers **Check** first for an `uncertain` action, then **Retry** only once the check reports `absent`; `unknown` shows manual-handling guidance. No control ever fires automatically on load or reconnect.
 - `Composer` with quick-reply chips when the backend asks ("Diagnose / Fix?").
 **Style:** clean, dense, engineering-tool aesthetic; dark-mode friendly; no UI library beyond Tailwind + headless primitives.
 
