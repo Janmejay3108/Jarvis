@@ -9,6 +9,13 @@ from uuid import uuid4
 
 import aiosqlite
 
+from src.orchestrator.jira_actions import (
+	JIRA_ACTION_STATES,
+	JIRA_CHECK_RESULTS,
+	JiraActionState,
+	JiraCheckResult,
+)
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS conversations (
 	id TEXT PRIMARY KEY,
@@ -64,6 +71,24 @@ CREATE TABLE IF NOT EXISTS approvals (
 	comment TEXT,
 	payload_json TEXT
 );
+CREATE TABLE IF NOT EXISTS jira_actions (
+	action_id TEXT PRIMARY KEY,
+	run_id TEXT NOT NULL,
+	ticket_key TEXT NOT NULL,
+	operation TEXT NOT NULL,
+	intent_json TEXT NOT NULL,
+	state TEXT NOT NULL CHECK (
+		state IN ('pending', 'succeeded', 'failed', 'uncertain', 'reconciled')
+	),
+	check_result TEXT NOT NULL CHECK (
+		check_result IN ('present', 'absent', 'unknown')
+	),
+	attempts INTEGER NOT NULL CHECK (attempts >= 0),
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS jira_actions_run_id_idx
+ON jira_actions(run_id);
 """
 
 _RUN_UPDATE_FIELDS = {
@@ -90,6 +115,13 @@ def _id() -> str:
 
 def _as_dict(row: aiosqlite.Row | None) -> dict[str, Any] | None:
 	return dict(row) if row is not None else None
+
+
+def _hydrate_jira_action(row: aiosqlite.Row | None) -> dict[str, Any] | None:
+	action = _as_dict(row)
+	if action is not None:
+		action["intent"] = json.loads(action.pop("intent_json"))
+	return action
 
 
 class StateStore:
@@ -226,6 +258,142 @@ class StateStore:
 				(run_id,),
 			)
 			return _as_dict(await cursor.fetchone())
+
+	async def create_jira_action(
+		self,
+		run_id: str,
+		ticket_key: str,
+		operation: str,
+		intent: Mapping[str, Any],
+		*,
+		action_id: str | None = None,
+	) -> dict[str, Any]:
+		stored_action_id = action_id if action_id is not None else _id()
+		timestamp = _now()
+		async with aiosqlite.connect(self.db_path) as db:
+			db.row_factory = aiosqlite.Row
+			await db.execute(
+				"""
+				INSERT INTO jira_actions (
+					action_id, run_id, ticket_key, operation,
+					intent_json, state, check_result, attempts,
+					created_at, updated_at
+				) VALUES (?, ?, ?, ?, ?, 'pending', 'unknown', 0, ?, ?)
+				""",
+				(
+					stored_action_id,
+					run_id,
+					ticket_key,
+					operation,
+					json.dumps(dict(intent)),
+					timestamp,
+					timestamp,
+				),
+			)
+			await db.commit()
+			cursor = await db.execute(
+				"SELECT * FROM jira_actions WHERE action_id = ?",
+				(stored_action_id,),
+			)
+			action = _hydrate_jira_action(await cursor.fetchone())
+		if action is None:
+			raise RuntimeError(
+				f"Persisted Jira action {stored_action_id} could not be read back"
+			)
+		return action
+
+	async def get_jira_action(self, action_id: str) -> dict[str, Any] | None:
+		async with aiosqlite.connect(self.db_path) as db:
+			db.row_factory = aiosqlite.Row
+			cursor = await db.execute(
+				"SELECT * FROM jira_actions WHERE action_id = ?",
+				(action_id,),
+			)
+			return _hydrate_jira_action(await cursor.fetchone())
+
+	async def list_jira_actions(self, run_id: str) -> list[dict[str, Any]]:
+		async with aiosqlite.connect(self.db_path) as db:
+			db.row_factory = aiosqlite.Row
+			cursor = await db.execute(
+				"SELECT * FROM jira_actions WHERE run_id = ? ORDER BY rowid",
+				(run_id,),
+			)
+			actions = []
+			for row in await cursor.fetchall():
+				action = _hydrate_jira_action(row)
+				if action is not None:
+					actions.append(action)
+			return actions
+
+	async def begin_jira_action_attempt(
+		self,
+		action_id: str,
+	) -> dict[str, Any]:
+		async with aiosqlite.connect(self.db_path) as db:
+			db.row_factory = aiosqlite.Row
+			cursor = await db.execute(
+				"""
+				UPDATE jira_actions
+				SET attempts = attempts + 1, state = 'pending', updated_at = ?
+				WHERE action_id = ?
+				""",
+				(_now(), action_id),
+			)
+			if cursor.rowcount == 0:
+				raise KeyError(action_id)
+			await db.commit()
+			cursor = await db.execute(
+				"SELECT * FROM jira_actions WHERE action_id = ?",
+				(action_id,),
+			)
+			action = _hydrate_jira_action(await cursor.fetchone())
+		if action is None:
+			raise KeyError(action_id)
+		return action
+
+	async def update_jira_action(
+		self,
+		action_id: str,
+		*,
+		state: JiraActionState,
+		check_result: JiraCheckResult | None = None,
+		attempts: int | None = None,
+	) -> dict[str, Any]:
+		if state not in JIRA_ACTION_STATES:
+			raise ValueError(f"Unsupported Jira action state: {state}")
+		if check_result is not None and check_result not in JIRA_CHECK_RESULTS:
+			raise ValueError(
+				f"Unsupported Jira action check result: {check_result}"
+			)
+		if attempts is not None and attempts < 0:
+			raise ValueError("Jira action attempts cannot be negative")
+
+		assignments = ["state = ?", "updated_at = ?"]
+		values: list[Any] = [state, _now()]
+		if check_result is not None:
+			assignments.append("check_result = ?")
+			values.append(check_result)
+		if attempts is not None:
+			assignments.append("attempts = ?")
+			values.append(attempts)
+		async with aiosqlite.connect(self.db_path) as db:
+			db.row_factory = aiosqlite.Row
+			cursor = await db.execute(
+				f"UPDATE jira_actions SET {', '.join(assignments)} "
+				"WHERE action_id = ?",
+				(*values, action_id),
+			)
+			if cursor.rowcount == 0:
+				raise KeyError(action_id)
+			await db.commit()
+			cursor = await db.execute(
+				"SELECT * FROM jira_actions WHERE action_id = ?",
+				(action_id,),
+			)
+			action = _hydrate_jira_action(await cursor.fetchone())
+		if action is None:
+			raise KeyError(action_id)
+		return action
 
 	async def append_step(
 		self,

@@ -2,18 +2,25 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.integrations.dai_client import LogEntry
+from src.integrations.jira_client import JiraWriteUncertain
 from src.models.run import AgentRun, RunStatus
 from src.orchestrator.events import EventBus
+from src.orchestrator.jira_actions import (
+	JiraActionState,
+	append_jira_action_footer,
+	jira_action_event_payload,
+)
 from src.orchestrator.state_store import StateStore
 from src.utils.budget import BudgetExceeded
 from src.utils.textguard import frame_evidence_text
@@ -168,6 +175,72 @@ class DiagnosisPipeline:
 			{"kind": kind, "data": data},
 			cost_usd_so_far=run.cost_usd,
 		)
+
+	async def _jira_action_event(
+		self,
+		run: AgentRun,
+		action: dict[str, Any],
+	) -> None:
+		await self._event_bus.publish(
+			run.run_id,
+			"jira.action.updated",
+			jira_action_event_payload(action),
+			cost_usd_so_far=run.cost_usd,
+		)
+
+	async def _create_jira_action(
+		self,
+		run: AgentRun,
+		operation: str,
+		intent: dict[str, Any],
+	) -> dict[str, Any]:
+		action = await self._state_store.create_jira_action(
+			run.run_id,
+			run.ticket_key,
+			operation,
+			intent,
+		)
+		await self._jira_action_event(run, action)
+		return action
+
+	async def _finish_jira_action(
+		self,
+		run: AgentRun,
+		action_id: str,
+		state: JiraActionState,
+	) -> JiraActionState:
+		action = await self._state_store.update_jira_action(
+			action_id,
+			state=state,
+		)
+		await self._jira_action_event(run, action)
+		return state
+
+	async def _attempt_jira_write(
+		self,
+		run: AgentRun,
+		action_id: str,
+		request: Callable[[], Awaitable[Any]],
+	) -> JiraActionState:
+		action = await self._state_store.begin_jira_action_attempt(action_id)
+		await self._jira_action_event(run, action)
+		try:
+			await request()
+		except asyncio.CancelledError:
+			raise
+		except JiraWriteUncertain:
+			state: JiraActionState = "uncertain"
+		except httpx.HTTPStatusError as error:
+			state = (
+				"failed"
+				if 400 <= error.response.status_code < 500
+				else "uncertain"
+			)
+		except Exception:  # noqa: BLE001
+			state = "uncertain"
+		else:
+			state = "succeeded"
+		return await self._finish_jira_action(run, action_id, state)
 
 	def _terminal_payload(self, run: AgentRun, reason: str) -> dict[str, Any]:
 		return {
@@ -403,9 +476,70 @@ class DiagnosisPipeline:
 			detail,
 		) as completion:
 			if self._jira_writes_enabled:
-				diagnosis = run.diagnosis if run.diagnosis is not None else {}
-				body = self._format_for_jira(diagnosis, run.ticket_key)
-				await self._jira.post_comment(run.ticket_key, body)
-				await self._jira.add_label(run.ticket_key, "ai-diagnosed")
+				comment = await self._create_jira_action(
+					run,
+					"post_comment",
+					{
+						"kind": "diagnosis_comment",
+						"source": "diagnosis_artifact",
+					},
+				)
+				try:
+					diagnosis = (
+						run.diagnosis
+						if run.diagnosis is not None
+						else {}
+					)
+					body = self._format_for_jira(
+						diagnosis,
+						run.ticket_key,
+					)
+					body = append_jira_action_footer(
+						body,
+						str(comment["action_id"]),
+					)
+				except Exception:  # noqa: BLE001
+					comment_state = await self._finish_jira_action(
+						run,
+						str(comment["action_id"]),
+						"failed",
+					)
+				else:
+					comment_state = await self._attempt_jira_write(
+						run,
+						str(comment["action_id"]),
+						lambda: self._jira.post_comment(
+							run.ticket_key,
+							body,
+						),
+					)
+
+				label = await self._create_jira_action(
+					run,
+					"add_label",
+					{"label": "ai-diagnosed"},
+				)
+				label_state = await self._attempt_jira_write(
+					run,
+					str(label["action_id"]),
+					lambda: self._jira.add_label(
+						run.ticket_key,
+						"ai-diagnosed",
+					),
+				)
+				if (
+					comment_state == "succeeded"
+					and label_state == "succeeded"
+				):
+					completion.detail = (
+						"Jira publication succeeded (2/2 actions)"
+					)
+				else:
+					completion.detail = (
+						"Diagnosis completed; Jira publication needs "
+						"attention: "
+						f"post_comment={comment_state}, "
+						f"add_label={label_state}"
+					)
 			else:
 				completion.detail = "Jira writes disabled"

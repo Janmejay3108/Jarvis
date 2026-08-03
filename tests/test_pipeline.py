@@ -6,9 +6,11 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
 from src.integrations.dai_client import LogEntry
+from src.integrations.jira_client import JiraWriteUncertain
 from src.models.run import AgentRun, RunStatus
 from src.orchestrator.events import EventBus
 from src.orchestrator.pipeline import (
@@ -23,9 +25,18 @@ from src.utils.budget import BudgetExceeded
 
 
 class RecordingJira:
-    def __init__(self, calls: list[str], ticket: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        calls: list[str],
+        ticket: dict[str, Any],
+        *,
+        comment_error: BaseException | None = None,
+        label_error: BaseException | None = None,
+    ) -> None:
         self.calls = calls
         self.ticket = ticket
+        self.comment_error = comment_error
+        self.label_error = label_error
 
     async def get_ticket(self, key: str) -> dict[str, Any]:
         self.calls.append(f"jira.get_ticket:{key}")
@@ -33,10 +44,20 @@ class RecordingJira:
 
     async def post_comment(self, key: str, body: str) -> dict[str, Any]:
         self.calls.append(f"jira.post_comment:{key}:{body}")
+        if self.comment_error is not None:
+            raise self.comment_error
         return {"id": "comment-1"}
 
     async def add_label(self, key: str, label: str) -> None:
         self.calls.append(f"jira.add_label:{key}:{label}")
+        if self.label_error is not None:
+            raise self.label_error
+
+
+def _http_status_error(status_code: int, message: str) -> httpx.HTTPStatusError:
+    request = httpx.Request("POST", "https://jira.example.test/rest/api/2/issue/T-1")
+    response = httpx.Response(status_code, request=request)
+    return httpx.HTTPStatusError(message, request=request, response=response)
 
 
 class RecordingEvidence:
@@ -205,6 +226,8 @@ async def _harness(
     jira_writes_enabled: bool = True,
     localizer_error: BaseException | None = None,
     diagnoser_error: BaseException | None = None,
+    comment_error: BaseException | None = None,
+    label_error: BaseException | None = None,
     extractor_must_be_skipped: bool = False,
 ) -> Harness:
     calls: list[str] = []
@@ -243,7 +266,12 @@ async def _harness(
             message_type="imagefound",
         ),
     ]
-    jira = RecordingJira(calls, ticket)
+    jira = RecordingJira(
+        calls,
+        ticket,
+        comment_error=comment_error,
+        label_error=label_error,
+    )
     evidence = RecordingEvidence(calls, logs, logs[1] if screenshot else None)
     extractor = RecordingExtractor(
         calls,
@@ -318,6 +346,7 @@ async def test_pipeline_happy_path_persists_order_events_artifacts_and_totals(
 
     assert result is harness.run
     assert result.status is RunStatus.completed
+    actions = await harness.store.list_jira_actions(result.run_id)
     assert harness.calls == [
         "jira.get_ticket:TESTAUTOMA-8055",
         "extractor.extract",
@@ -328,7 +357,10 @@ async def test_pipeline_happy_path_persists_order_events_artifacts_and_totals(
         "localizer.localize",
         "diagnoser.diagnose",
         "formatter:TESTAUTOMA-8055",
-        "jira.post_comment:TESTAUTOMA-8055:Diagnosis: Boolean condition rejects the valid state",
+        (
+            "jira.post_comment:TESTAUTOMA-8055:Diagnosis: Boolean condition rejects "
+            f"the valid state\n\n[JARVIS action_id={actions[0]['action_id']}]"
+        ),
         "jira.add_label:TESTAUTOMA-8055:ai-diagnosed",
     ]
     steps = await harness.store.list_steps(result.run_id)
@@ -356,6 +388,12 @@ async def test_pipeline_happy_path_persists_order_events_artifacts_and_totals(
         "artifact",
         "step.started",
         "agent.message",
+        "jira.action.updated",
+        "jira.action.updated",
+        "jira.action.updated",
+        "jira.action.updated",
+        "jira.action.updated",
+        "jira.action.updated",
         "step.completed",
         "run.completed",
     ]
@@ -393,6 +431,180 @@ async def test_pipeline_happy_path_persists_order_events_artifacts_and_totals(
     for index in range(3):
         assert f'"i": {index}' in harness.matcher.framed_logs
     assert harness.matcher.framed_logs.count('"severity": "INFORMATIONAL"') == 3
+
+
+@pytest.mark.asyncio
+async def test_jira_actions_happy_path_are_persisted_footered_and_replayable(
+    tmp_path: Path,
+) -> None:
+    harness = await _harness(tmp_path)
+
+    result = await harness.pipeline.execute(harness.run)
+
+    actions = await harness.store.list_jira_actions(result.run_id)
+    assert [action["operation"] for action in actions] == [
+        "post_comment",
+        "add_label",
+    ]
+    assert [action["state"] for action in actions] == ["succeeded", "succeeded"]
+    assert [action["attempts"] for action in actions] == [1, 1]
+    assert actions[0]["intent"] == {
+        "kind": "diagnosis_comment",
+        "source": "diagnosis_artifact",
+    }
+    assert actions[1]["intent"] == {"label": "ai-diagnosed"}
+    comment_call = next(
+        call for call in harness.calls if call.startswith("jira.post_comment:")
+    )
+    assert comment_call.endswith(
+        f"\n\n[JARVIS action_id={actions[0]['action_id']}]"
+    )
+    action_events = [
+        event
+        for event in await harness.store.list_events(result.run_id)
+        if event["type"] == "jira.action.updated"
+    ]
+    assert len(action_events) == 6
+    allowed = {
+        "action_id",
+        "operation",
+        "state",
+        "check_result",
+        "attempts",
+        "created_at",
+        "updated_at",
+    }
+    assert all(set(event["payload"]) == allowed for event in action_events)
+    assert [event["payload"]["attempts"] for event in action_events] == [
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+    ]
+    post_step = (await harness.store.list_steps(result.run_id))[-1]
+    assert post_step["detail"] == "Jira publication succeeded (2/2 actions)"
+
+    reopened = StateStore(harness.store.db_path)
+    await reopened.initialize()
+    persisted = await reopened.list_events(result.run_id)
+    stream = EventBus(reopened).subscribe(result.run_id)
+    replayed = [await anext(stream) for _event in persisted]
+    await stream.aclose()
+    assert [event.payload for event in replayed if event.type == "jira.action.updated"] == [
+        event["payload"] for event in action_events
+    ]
+
+
+@pytest.mark.asyncio
+async def test_definite_comment_failure_does_not_block_label_or_fail_run(
+    tmp_path: Path,
+) -> None:
+    harness = await _harness(
+        tmp_path,
+        comment_error=_http_status_error(400, "definite failure"),
+    )
+
+    result = await harness.pipeline.execute(harness.run)
+
+    actions = await harness.store.list_jira_actions(result.run_id)
+    assert [action["state"] for action in actions] == ["failed", "succeeded"]
+    assert sum(call.startswith("jira.post_comment:") for call in harness.calls) == 1
+    assert sum(call.startswith("jira.add_label:") for call in harness.calls) == 1
+    assert result.status is RunStatus.completed
+    post_step = (await harness.store.list_steps(result.run_id))[-1]
+    assert post_step["status"] == "completed"
+    assert post_step["detail"] == (
+        "Diagnosis completed; Jira publication needs attention: "
+        "post_comment=failed, add_label=succeeded"
+    )
+    event_types = [
+        event["type"] for event in await harness.store.list_events(result.run_id)
+    ]
+    assert "step.failed" not in event_types
+    assert "run.failed" not in event_types
+
+
+@pytest.mark.asyncio
+async def test_uncertain_writes_are_not_retried_and_operations_remain_independent(
+    tmp_path: Path,
+) -> None:
+    harness = await _harness(
+        tmp_path,
+        comment_error=JiraWriteUncertain("post_comment", "TESTAUTOMA-8055"),
+    )
+
+    result = await harness.pipeline.execute(harness.run)
+
+    actions = await harness.store.list_jira_actions(result.run_id)
+    assert [action["state"] for action in actions] == ["uncertain", "succeeded"]
+    assert [action["attempts"] for action in actions] == [1, 1]
+    assert sum(call.startswith("jira.post_comment:") for call in harness.calls) == 1
+    assert sum(call.startswith("jira.add_label:") for call in harness.calls) == 1
+    calls_before_reopen = list(harness.calls)
+    reopened = StateStore(harness.store.db_path)
+    await reopened.initialize()
+    EventBus(reopened)
+    assert harness.calls == calls_before_reopen
+    assert result.status is RunStatus.completed
+
+
+@pytest.mark.asyncio
+async def test_cancelled_jira_write_leaves_replayable_pending_action(
+    tmp_path: Path,
+) -> None:
+    harness = await _harness(tmp_path, comment_error=asyncio.CancelledError())
+
+    with pytest.raises(asyncio.CancelledError):
+        await harness.pipeline.execute(harness.run)
+
+    assert sum(call.startswith("jira.post_comment:") for call in harness.calls) == 1
+    assert not any(call.startswith("jira.add_label:") for call in harness.calls)
+    reopened = StateStore(harness.store.db_path)
+    await reopened.initialize()
+    actions = await reopened.list_jira_actions(harness.run.run_id)
+    assert len(actions) == 1
+    assert actions[0]["operation"] == "post_comment"
+    assert actions[0]["state"] == "pending"
+    assert actions[0]["attempts"] == 1
+    persisted = await reopened.list_events(harness.run.run_id)
+    stream = EventBus(reopened).subscribe(harness.run.run_id)
+    replayed = [await anext(stream) for _event in persisted]
+    await stream.aclose()
+    pending = [event for event in replayed if event.type == "jira.action.updated"]
+    assert [event.payload["attempts"] for event in pending] == [0, 1]
+    assert sum(call.startswith("jira.post_comment:") for call in harness.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_jira_publication_errors_are_redacted_from_rows_events_and_step_detail(
+    tmp_path: Path,
+) -> None:
+    secret = (
+        "pat-secret https://user:password@jira.example.test body-secret raw-response"
+    )
+    harness = await _harness(tmp_path, comment_error=RuntimeError(secret))
+
+    result = await harness.pipeline.execute(harness.run)
+
+    actions = await harness.store.list_jira_actions(result.run_id)
+    events = await harness.store.list_events(result.run_id)
+    post_step = (await harness.store.list_steps(result.run_id))[-1]
+    serialized = json.dumps(
+        {"actions": actions, "events": events, "detail": post_step["detail"]}
+    )
+    for forbidden in (
+        "pat-secret",
+        "user:password",
+        "body-secret",
+        "raw-response",
+    ):
+        assert forbidden not in serialized
+    assert [action["state"] for action in actions] == ["uncertain", "succeeded"]
+    assert sum(call.startswith("jira.post_comment:") for call in harness.calls) == 1
+    assert sum(call.startswith("jira.add_label:") for call in harness.calls) == 1
+    assert result.status is RunStatus.completed
 
 
 @pytest.mark.asyncio

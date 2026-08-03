@@ -704,11 +704,19 @@ GET  /api/conversations/{id}   → full message + run-card history
 GET  /api/runs/{run_id}/stream → SSE (replay-from-db then live)
 POST /api/runs/{run_id}/approval {decision, comment?}
 POST /api/runs/{run_id}/cancel
+GET  /api/runs/{run_id}/jira_actions
+POST /api/runs/{run_id}/jira_actions/{action_id}/check  → read-only reconciliation probe
+POST /api/runs/{run_id}/jira_actions/{action_id}/retry {confirm: true} → one explicit re-attempt
 GET  /api/metrics
 POST /api/webhooks/bitbucket   → PR-merge webhook
 POST /api/webhooks/dai         → JARVIS run-completion webhook (O1)
 POST /api/runs/{id}/human_input {answer}   → plan4 ask_human
 ```
+
+Jira recovery is action-scoped, never run-scoped. An `uncertain` action must be checked before
+retry: `present` reconciles without another write, `absent` permits an explicit retry, and
+`unknown` remains uncertain for manual handling. Retry is never automatic on reload, reconnect,
+process restart, queue recovery, or replay. The routes are implemented in Plan1 Step 1.5.3.
 
 ### 10.2 SSE envelope
 
@@ -720,6 +728,9 @@ POST /api/runs/{id}/human_input {answer}   → plan4 ask_human
 **Types:** `run.queued` · `step.started` · `step.progress` · `step.completed` · `step.failed` ·
 `agent.message` · `tool.called` / `tool.result` · `artifact` (kind:
 `diagnosis|diff|screenshot|log_excerpt|evidence|pr`) · `approval.requested` / `approval.resolved` ·
+`jira.action.updated` (payload: `action_id`, operation, state, check result, attempt count, and
+timestamps — never intent, ticket data, credentials, authenticated URLs, bodies, attachment bytes,
+MIME, exception text, or raw request/response text) ·
 `run.completed` / `run.failed`.
 
 **Every event carries running cost.** Cost honesty is a product feature, not an afterthought.
@@ -735,8 +746,12 @@ fix?" with quick-reply buttons. Anything else takes one light model call. Unknow
 Vite + React + TypeScript + Tailwind. Left sidebar (conversations), main chat pane, composer.
 Components: `ChatMessage`, `RunCard` (live step timeline + cost badge), `ToolCallCard` (collapsible),
 `ArtifactCard` (diagnosis viewer / screenshot lightbox / log block), `ApprovalCard`, and plan4's
-`QuestionCard`. Style: clean, dense, engineering-tool aesthetic; dark-mode friendly; no UI library
-beyond Tailwind + headless primitives.
+`QuestionCard`. `JiraActionCard` is rebuilt from replayed `jira.action.updated` events and shows
+*“diagnosis completed · Jira publication needs attention”* without failing the run. An uncertain
+action offers **Check** first, **Retry** only after `absent`; `unknown` shows manual-handling
+guidance. No action control fires automatically on load or reconnect. The component is implemented
+in Plan1 Step 1.6.2. Style: clean, dense, engineering-tool aesthetic; dark-mode friendly; no UI
+library beyond Tailwind + headless primitives.
 
 **SSE is reconnect-safe:** events replay from the DB first, then go live, keyed by `Last-Event-ID`.
 History survives a browser restart because everything is replayed from the `events` table.
@@ -755,10 +770,18 @@ runs(run_id, ticket_key, track_id, mode, status, conversation_id, created_at,
 run_steps(id, run_id, name, status, started_at, completed_at, detail, error)
 events(event_id, run_id, ts, type, payload_json)      ← SSE replay source
 approvals(id, run_id, requested_at, resolved_at, decision, comment, payload_json)
+jira_actions(action_id, run_id, ticket_key, operation, intent_json, state, check_result,
+             attempts, created_at, updated_at)
 ```
 
 Plan4 adds a `kind` column to `approvals` (`approval|question|jira_post`, default `approval`) — **a
 migration, not a new table**.
+
+Plan1 Step 1.1.2 adds `jira_actions` as a migration on the same plan0 store, not a new store.
+`state` is `pending|succeeded|failed|uncertain|reconciled`; `check_result` is
+`present|absent|unknown`. Intent contains safe reconstruction metadata only. The store never keeps
+PATs, authenticated URLs, request bodies, attachment bytes, MIME, exception text, or raw
+request/response text.
 
 **Why:** in-memory runs lose work on crash, and the chat product needs history. Runs are resumable,
 chat history survives restarts, and metrics read one store.

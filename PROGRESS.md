@@ -86,6 +86,6 @@ as **O8** against Gate 1. **Phase 0.B may begin.** *(Ruled by Jay, 2026-07-28 / 
     approval rule, PAT) deferred per B.1 action 1.
 [x] plan1/1.1/1.1.1 — 2026-08-03 — Run and step lifecycle models landed with persisted EventBus
     transitions and durable step-detail semantics; 51 tests passed, 2 skipped, and Ruff clean.
-[x] plan1/1.1/1.1.2 — 2026-08-03 — Diagnosis pipeline landed with reliable-provenance evidence framing and instruction separation; 79 tests passed, 2 skipped, and Ruff clean.
+[x] plan1/1.1/1.1.2 — 2026-08-03 — Diagnosis pipeline landed with reliable-provenance evidence framing and instruction separation; Decision 004 follow-up added persisted/replayable Jira actions, independent single-attempt comment/label publication, safe action events, and non-terminal Jira degradation; 128 tests passed, 2 skipped, and Ruff clean.
 [x] plan1/1.1/1.1.3 — 2026-08-03 — Per-track FIFO diagnosis queues and native cross-process validation locks landed; 95 tests passed, 2 skipped, and Ruff clean.
 [x] plan1/1.2/1.2.1 — 2026-08-03 — Jira DC REST v2 client hardened with retry-safe reads, single-attempt uncertain writes, complete REST surface validation, and persisted reconciliation design; 119 tests passed, 2 skipped, and Ruff clean.

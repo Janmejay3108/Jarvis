@@ -46,7 +46,117 @@ async def test_schema_creation(tmp_path: Path) -> None:
         "run_steps",
         "events",
         "approvals",
+        "jira_actions",
     } <= tables
+
+
+@pytest.mark.asyncio
+async def test_jira_actions_migrate_existing_plan0_database_without_data_loss(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "agent.db"
+    old_schema = """
+    CREATE TABLE conversations (id TEXT PRIMARY KEY, title TEXT, created_at TEXT, updated_at TEXT);
+    CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, role TEXT, content TEXT, run_id TEXT NULL, ts TEXT);
+    CREATE TABLE runs (run_id TEXT PRIMARY KEY, ticket_key TEXT, track_id TEXT, mode TEXT, status TEXT, conversation_id TEXT, created_at TEXT, completed_at TEXT, tokens_in INTEGER DEFAULT 0, tokens_out INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0.0, summary_json TEXT);
+    CREATE TABLE run_steps (id TEXT PRIMARY KEY, run_id TEXT, name TEXT, status TEXT, started_at TEXT, completed_at TEXT, detail TEXT, error TEXT);
+    CREATE TABLE events (event_id TEXT PRIMARY KEY, run_id TEXT, ts TEXT, type TEXT, payload_json TEXT);
+    CREATE TABLE approvals (id TEXT PRIMARY KEY, run_id TEXT, requested_at TEXT, resolved_at TEXT, decision TEXT, comment TEXT, payload_json TEXT);
+    """
+    async with aiosqlite.connect(db_path) as db:
+        await db.executescript(old_schema)
+        await db.execute(
+            "INSERT INTO runs VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, 0, 0, 0.0, ?)",
+            (
+                "sentinel-run",
+                "TESTAUTOMA-8055",
+                "enovia",
+                "diagnose",
+                "completed",
+                "2026-08-03T12:00:00+00:00",
+                "{}",
+            ),
+        )
+        await db.commit()
+
+    store = StateStore(str(db_path))
+    await store.initialize()
+    await store.initialize()
+
+    assert (await store.get_run("sentinel-run"))["ticket_key"] == "TESTAUTOMA-8055"
+    async with aiosqlite.connect(db_path) as db:
+        table = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'jira_actions'"
+        )
+        index = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'jira_actions_run_id_idx'"
+        )
+        assert await table.fetchone() == ("jira_actions",)
+        assert await index.fetchone() == ("jira_actions_run_id_idx",)
+
+
+@pytest.mark.asyncio
+async def test_jira_action_crud_hydrates_intent_and_validates_states(
+    tmp_path: Path,
+) -> None:
+    store = await _store(tmp_path)
+    first = await store.create_jira_action(
+        "run-1",
+        "TESTAUTOMA-8055",
+        "post_comment",
+        {"kind": "diagnosis_comment", "source": "diagnosis_artifact"},
+        action_id="action-1",
+    )
+    second = await store.create_jira_action(
+        "run-1",
+        "TESTAUTOMA-8055",
+        "add_label",
+        {"label": "ai-diagnosed"},
+        action_id="action-2",
+    )
+
+    assert first["state"] == "pending"
+    assert first["check_result"] == "unknown"
+    assert first["attempts"] == 0
+    assert first["intent"] == {
+        "kind": "diagnosis_comment",
+        "source": "diagnosis_artifact",
+    }
+    assert "intent_json" not in first
+    assert [action["action_id"] for action in await store.list_jira_actions("run-1")] == [
+        "action-1",
+        "action-2",
+    ]
+
+    begun = await store.begin_jira_action_attempt("action-1")
+    assert begun["attempts"] == 1
+    assert begun["created_at"] == first["created_at"]
+    assert begun["updated_at"] >= first["updated_at"]
+    succeeded = await store.update_jira_action(
+        "action-1",
+        state="succeeded",
+        check_result="present",
+    )
+    assert succeeded["state"] == "succeeded"
+    assert succeeded["check_result"] == "present"
+    assert succeeded["attempts"] == 1
+    assert await store.get_jira_action("action-1") == succeeded
+    assert second["action_id"] == "action-2"
+
+    with pytest.raises(KeyError):
+        await store.begin_jira_action_attempt("missing")
+    with pytest.raises(KeyError):
+        await store.update_jira_action("missing", state="failed")
+    with pytest.raises(ValueError, match="state"):
+        await store.update_jira_action("action-1", state="invalid")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="check result"):
+        await store.update_jira_action(
+            "action-1",
+            state="failed",
+            check_result="invalid",  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="negative"):
+        await store.update_jira_action("action-1", state="failed", attempts=-1)
 
 
 @pytest.mark.asyncio
