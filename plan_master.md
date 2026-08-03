@@ -394,9 +394,19 @@ GET  /api/conversations/{id}   → full message + run-card history
 GET  /api/runs/{run_id}/stream → SSE event stream (live or replay-from-db then live)
 POST /api/runs/{run_id}/approval {decision: "approve"|"reject", comment?}
 POST /api/runs/{run_id}/cancel
+GET  /api/runs/{run_id}/jira_actions          → persisted Jira action records for this run
+POST /api/runs/{run_id}/jira_actions/{action_id}/check  → READ-ONLY reconciliation probe
+POST /api/runs/{run_id}/jira_actions/{action_id}/retry {confirm: true} → ONE explicit re-attempt
 GET  /api/metrics              → metrics JSON
 POST /api/webhooks/bitbucket   → PR-merge webhook (plan3)
 ```
+**Jira action recovery is action-scoped, never run-scoped** — `check`/`retry` act on one
+`action_id`; they never re-run diagnosis or the pipeline. **A retry is never automatic**: not on
+reload, reconnect, restart, or queue recovery. An `uncertain` action MUST be checked before a retry
+is offered (check `present` → reconciled without a second write; `absent` → retry permitted;
+`unknown` → stays uncertain, manual handling). Rationale:
+`docs/agent/decisions/003-jira-write-retry-boundary.md` +
+`docs/agent/decisions/004-jira-action-reconciliation.md`.
 
 ### 5.2 SSE event envelope (every event; persisted to `events` table)
 ```json
@@ -407,6 +417,9 @@ POST /api/webhooks/bitbucket   → PR-merge webhook (plan3)
 · `agent.message` (NL narration for a chat bubble) · `tool.called` / `tool.result` (collapsible card)
 · `artifact` (payload.kind: `diagnosis|diff|screenshot|log_excerpt|evidence|pr`)
 · `approval.requested` (payload: diff, evidence, expires) · `approval.resolved`
+· `jira.action.updated` (payload: the SAFE action summary — `action_id`, operation, state,
+  check result, attempt count, timestamps; **never** PAT, authenticated URL, attachment bytes,
+  or raw transport/response text)
 · `run.completed` / `run.failed` (summary, totals).
 
 ### 5.3 Intent grammar (chat → pipeline)
