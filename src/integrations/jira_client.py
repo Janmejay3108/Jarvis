@@ -12,12 +12,22 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
+class JiraWriteUncertain(RuntimeError):
+    def __init__(self, operation: str, ticket_key: str) -> None:
+        self.operation = operation
+        self.ticket_key = ticket_key
+        super().__init__(
+            f"Jira may have completed {operation} for {ticket_key}; "
+            "check Jira before retrying"
+        )
+
+
 def _is_retryable(error: BaseException) -> bool:
     if isinstance(error, httpx.TimeoutException):
         return True
     return (
         isinstance(error, httpx.HTTPStatusError)
-        and error.response.status_code >= 500
+        and 500 <= error.response.status_code < 600
     )
 
 
@@ -49,12 +59,6 @@ class JiraClient:
     async def __aexit__(self, *_args: object) -> None:
         await self.aclose()
 
-    @retry(
-        retry=retry_if_exception(_is_retryable),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=0.25, min=0.25, max=2),
-        reraise=True,
-    )
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         headers = dict(self._headers)
         headers.update(kwargs.pop("headers", {}))
@@ -67,22 +71,56 @@ class JiraClient:
         response.raise_for_status()
         return response
 
+    @retry(
+        retry=retry_if_exception(_is_retryable),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.25, min=0.25, max=2),
+        reraise=True,
+    )
+    async def _read_request(
+        self,
+        method: str,
+        path: str,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        return await self._request(method, path, **kwargs)
+
+    async def _write_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        operation: str,
+        ticket_key: str,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        try:
+            return await self._request(method, path, **kwargs)
+        except (httpx.TimeoutException, httpx.HTTPStatusError) as error:
+            if _is_retryable(error):
+                raise JiraWriteUncertain(operation, ticket_key) from error
+            raise
+
     async def get_ticket(self, key: str) -> dict[str, Any]:
-        response = await self._request("GET", f"/rest/api/2/issue/{key}")
+        response = await self._read_request("GET", f"/rest/api/2/issue/{key}")
         return response.json()
 
     async def post_comment(self, key: str, body: str) -> dict[str, Any]:
-        response = await self._request(
+        response = await self._write_request(
             "POST",
             f"/rest/api/2/issue/{key}/comment",
+            operation="post_comment",
+            ticket_key=key,
             json={"body": body},
         )
         return response.json()
 
     async def add_label(self, key: str, label: str) -> None:
-        await self._request(
+        await self._write_request(
             "PUT",
             f"/rest/api/2/issue/{key}",
+            operation="add_label",
+            ticket_key=key,
             json={"update": {"labels": [{"add": label}]}},
         )
 
@@ -92,22 +130,27 @@ class JiraClient:
         filename: str,
         data: bytes,
         mime: str,
-    ) -> dict[str, Any]:
-        response = await self._request(
+    ) -> list[dict[str, Any]]:
+        response = await self._write_request(
             "POST",
             f"/rest/api/2/issue/{key}/attachments",
+            operation="add_attachment",
+            ticket_key=key,
             headers={"X-Atlassian-Token": "no-check"},
             files={"file": (filename, data, mime)},
         )
-        return response.json()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise TypeError("Jira attachment response must be a list")
+        return payload
 
     async def transitions(self, key: str) -> list[dict[str, Any]]:
-        response = await self._request(
+        response = await self._read_request(
             "GET",
             f"/rest/api/2/issue/{key}/transitions",
         )
         payload = response.json()
-        transitions = payload.get("transitions", [])
+        transitions = payload.get("transitions")
         if not isinstance(transitions, list):
             raise TypeError("Jira transitions response must contain transitions[]")
         return transitions
@@ -129,8 +172,10 @@ class JiraClient:
                 transition=transition_name,
             )
             return
-        await self._request(
+        await self._write_request(
             "POST",
             f"/rest/api/2/issue/{key}/transitions",
+            operation="transition",
+            ticket_key=key,
             json={"transition": {"id": str(transition["id"])}},
         )

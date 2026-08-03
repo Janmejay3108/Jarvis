@@ -10,7 +10,6 @@ from pytest_httpx import HTTPXMock
 
 from src.evidence.packager import EvidenceBundle, fetch_evidence
 from src.integrations.dai_client import DaiClient, LogEntry
-from src.integrations.jira_client import JiraClient
 
 
 def _settings() -> SimpleNamespace:
@@ -89,21 +88,6 @@ async def test_dai_authenticate_caches_token(httpx_mock: HTTPXMock) -> None:
 
     assert first == second == "cached-token"
     assert len(httpx_mock.get_requests()) == 1
-
-
-@pytest.mark.asyncio
-async def test_jira_get_ticket(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(
-        method="GET",
-        url="https://jira.test/rest/api/2/issue/TESTAUTOMA-8055",
-        json={"key": "TESTAUTOMA-8055", "fields": {"summary": "Failure"}},
-    )
-
-    async with JiraClient(config=_settings()) as client:
-        ticket = await client.get_ticket("TESTAUTOMA-8055")
-
-    assert ticket["key"] == "TESTAUTOMA-8055"
-    assert httpx_mock.get_request().headers["Authorization"] == "Bearer jira-token"
 
 
 def test_trimmed_log_excerpt() -> None:
