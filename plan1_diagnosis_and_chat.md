@@ -212,6 +212,7 @@ Run the eval; human-score each diagnosis; feed verdicts back. If below bar: the 
 | Avg diagnosis time | < 5 min | ☐ |
 | No false confidence (LOW when unsure) | yes | ☐ |
 | Chat MVP usable by a dev (SSO, live run, history) | yes | ☐ |
+| **Jira action recovery complete** (isolated writes · persisted actions · replayed state · check-before-retry · no automatic retry) | **yes** | ☐ |
 | Cached-prompt savings visible (vs uncached estimate) | reported | ☐ |
 | Avg diagnosis cost (Opus 4.6 + caching) | reported honestly (~$1–3 expected) | ☐ |
 
