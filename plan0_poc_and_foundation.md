@@ -185,7 +185,7 @@ using the dai apis used in the automated JIRA ticket creation initiative to fetc
 **Goal:** prove the engine is reachable and the credentials work — `MODEL` (Opus 4.7) answers through `ANTHROPIC_BASE_URL` (the Keysight gateway).
 **Actions:**
 1. **(User)** place into `samples/`: the 8055 test script, `CommonEnovia.script` (incl. ~line 409), and the DAI failure-log excerpt.
-2. Agent: write `scripts/poc_claude.py` — a draft diagnosis system prompt (full version in plan1) + user message embedding ticket/script/handler/logs with untrusted-data delimiters; call **`MODEL` (Opus 4.7)** via `ANTHROPIC_BASE_URL` (proves the gateway path too); print the response.
+2. Agent: write `scripts/poc_claude.py` — a draft diagnosis system prompt (full version in plan1) + user message embedding ticket/script/handler/logs with evidence-framing delimiters (UP-14); call **`MODEL` (Opus 4.7)** via `ANTHROPIC_BASE_URL` (proves the gateway path too); print the response.
 3. Run it from the **development machine**; paste output.
 **Verification:** a successful authenticated call returns a response — engine reachable, credentials valid, gateway path working.
 **DoD:** ✅ **met.** Opus 4.7 answered through the Keysight gateway, after root-causing the `claude-opus-4-6` whitelist gap and the `load_dotenv(override=True)` masking (PROGRESS 2026-06-12).
