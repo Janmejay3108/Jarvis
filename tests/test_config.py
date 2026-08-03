@@ -11,12 +11,17 @@ from src.orchestrator.track_loader import load_test_config_registry, load_track
 def test_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MODEL", "claude-opus-4-7")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-api-key")
+    monkeypatch.setenv("JIRA_WRITES_ENABLED", "false")
 
     configured = Settings(_env_file=None)
 
     assert configured.model == "claude-opus-4-7"
     assert isinstance(configured.anthropic_api_key, SecretStr)
     assert configured.anthropic_api_key.get_secret_value() == "test-api-key"
+    assert configured.jira_writes_enabled is False
+
+    monkeypatch.delenv("JIRA_WRITES_ENABLED")
+    assert Settings(_env_file=None).jira_writes_enabled is True
 
 
 def test_track_loader_rejects_unresolved_values(tmp_path: Path) -> None:

@@ -253,6 +253,35 @@ async def test_end_error_fails_step_and_run_and_publishes_failed(
 
 
 @pytest.mark.asyncio
+async def test_end_error_without_detail_preserves_started_detail(
+    tmp_path: Path,
+) -> None:
+    store, bus = await _runtime(tmp_path)
+    run = await AgentRun.create(
+        store,
+        bus,
+        ticket_key="TESTAUTOMA-8055",
+        mode="diagnose",
+    )
+    await run.begin("analyze", RunStatus.analyzing, "Analyzing evidence")
+
+    step = await run.end(error="pipeline_error")
+
+    persisted_run = await store.get_run(run.run_id)
+    persisted_step = (await store.list_steps(run.run_id))[0]
+    failed_event = (await store.list_events(run.run_id))[-1]
+    assert step.detail == "Analyzing evidence"
+    assert persisted_step["detail"] == "Analyzing evidence"
+    assert failed_event["payload"]["detail"] == "Analyzing evidence"
+    assert run.status is RunStatus.failed
+    assert persisted_run is not None
+    assert persisted_run["status"] == "failed"
+    assert step.completed_at is not None
+    assert run.completed_at == step.completed_at
+    assert persisted_run["completed_at"] == step.completed_at.isoformat()
+
+
+@pytest.mark.asyncio
 async def test_lifecycle_helpers_reject_unbound_or_invalid_sequence(
     tmp_path: Path,
 ) -> None:

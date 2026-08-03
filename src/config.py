@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     jira_base_url: str = ""
     jira_pat: SecretStr = SecretStr("")
+    jira_writes_enabled: bool = True
 
     bitbucket_base_url: str = ""
     bitbucket_pat: SecretStr = SecretStr("")
