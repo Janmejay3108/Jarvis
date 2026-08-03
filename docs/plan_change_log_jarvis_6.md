@@ -62,37 +62,50 @@ failure, which is the wrong answer to give a developer.
 | 4 | `76655bf` | `plan1` Steps 1.5.3, 1.6.2 | Added the three SSO-gated recovery routes with read-only `check` and explicit `retry`; added `JiraActionCard` rebuilt from replayed events; extended Verification and DoD | J6, J7 |
 | 5 | `3535ed0` | `plan1` GATE 1 | New gate row requiring Jira action recovery to be complete | J8 |
 | 6 | `226336e` | `plan3` §3.3, Step 3.4.2 | Lifecycle writes reuse the plan1 mechanism; per-operation reconciliation reads defined for comment/label/**attachment**/**transition**; degradation rule 4 now names the persisted action and its recovery path | J9 |
+| 7 | *this commit* | `plan_master` UP-8 | **Correction.** Added `jira_actions` to the persistent-state enumeration, marked as a plan1 Step 1.1.2 migration on the plan0 §B.6 store; rewrote §4 of this log, which had wrongly argued no master data-model entry was needed | J5 |
 
 **No edit was made without a ruling authorising it.**
 
 ---
 
-## 4. Deviation from Decision 004, and why
+## 4. Decision 004's locator was wrong; its requirement is met in two places
 
-Decision 004 asked for the persisted-action schema to be added to *"`plan_master.md` section
-4/data model"*. **It was placed in `plan1` Step 1.1.2 instead.** Two reasons:
+Decision 004 asked for the persisted-action schema in *"`plan_master.md` section 4/data model"*.
+**That locator does not exist** — `plan_master` §4 is the repo layout tree. The requirement is real,
+so it was satisfied at the two places that actually carry it:
 
-- `plan_master` §4 is the **repo layout tree**, not a data model. The canonical SQLite schema lives
-  in `plan0` §B.6.
-- `plan0` §B.6 is **already built** (`state_store.py`, six tables, merged). Editing a completed
-  step to describe work that a later plan performs would misrepresent what B.6 delivered. The
-  established convention is the plan4 precedent recorded in `docs/context.md` §11 — *"Plan4 adds a
-  `kind` column to `approvals` … a migration, not a new table"* — where the **owning plan declares
-  its own schema delta**.
+- **`plan_master` UP-8** — the master persistent-state enumeration, which lists what lives in
+  `data/agent.db`. `jira_actions` is named there, marked as *"a plan1 Step 1.1.2 migration on the
+  plan0 §B.6 store, not a new store"*. **This is the binding data contract Decision 004 asked for.**
+- **`plan1` Step 1.1.2** — the full column list, states, and safe-persistence constraints, in the
+  step that performs the writes.
 
-So `jira_actions` is declared in `plan1` Step 1.1.2 and explicitly labelled *"a migration on plan0
-§B.6's store, not a new store"*. `plan_master` §5 carries the binding **contract** (routes, event,
-policy) as Decision 004 requires. `plan0` was not edited.
+`plan_master` §5 carries the route/event/policy contract. Together these close Decision 004's
+requirement.
+
+**`plan0` §B.6 was deliberately not edited.** It is already built (`state_store.py`, six tables,
+merged); editing a completed step to describe work a later plan performs would misrepresent what
+B.6 delivered. The convention followed is the plan4 precedent — *"Plan4 adds a `kind` column to
+`approvals` … a migration, not a new table"* — where the owning plan declares its own schema delta
+and the canonical enumerations carry a forward note.
+
+**Correction history.** Fixes 1–6 declared the schema in `plan1` only and argued in this section
+that `plan_master` needed no data-model entry. Review found that wrong: UP-8 *is* a master data
+contract, and it was left enumerating six tables. Fix 7 corrected UP-8 and rewrote this section.
+The original reasoning also failed to notice that the precedent it invoked works by placing a
+forward note **in the canonical schema block** — which is why the `docs/context.md` §11 follow-up
+in §8 exists.
 
 ---
 
 ## 5. Mechanical verification
 
 ```
-jira_actions              8 occurrences
+jira_actions              9 occurrences
 jira.action.updated       6 occurrences
 decision refs (003/004)   7 occurrences
 never-automatic wording   3 occurrences
+UP-8 naming jira_actions  1 occurrence
 ```
 
 Additive-change proof:
@@ -101,14 +114,14 @@ Additive-change proof:
 git diff --stat master...HEAD
  plan1_diagnosis_and_chat.md | 29 +++++++++++++++++++++++++----
  plan3_lifecycle_rollout.md  |  7 +++++--
- plan_master.md              | 13 +++++++++++++
- 3 files changed, 43 insertions(+), 6 deletions(-)
+ plan_master.md              | 15 ++++++++++++++-
+ 3 files changed, 44 insertions(+), 7 deletions(-)
 ```
 
-All **6** removed lines were audited individually. Each is a line replaced by an expanded version
+All **7** removed lines were audited individually. Each is a line replaced by an expanded version
 that **retains the original text verbatim**: the Step 1.1.2 DoD, the Step 1.2.1 client one-liner,
-the Step 1.5.3 Verification and DoD, the §3.3 DoD, and the §3.4.2 degradation-rule line. **No
-requirement was dropped.**
+the Step 1.5.3 Verification and DoD, the §3.3 DoD, the §3.4.2 degradation-rule line, and (fix 7)
+the UP-8 row. **No requirement was dropped.**
 
 Core guards re-counted after the pass, all intact:
 `max_attempts` 3 · `callers_pass` 4 · `BudgetGuard` 3 · `NOT_ONBOARDED` 6 · `STALE_SYNC` 12.
@@ -140,8 +153,14 @@ inside an existing section.
 - `docs/context.md` §9.3 is consistent with the plans again: the "nothing here may fail the run"
   rule is now stated in the plan that actually performs the diagnosis-phase writes.
 
-## 8. Not done in this pass
+## 8. Not done in this pass — one required follow-up
 
+- **`docs/context.md` §11 must gain a forward note for `jira_actions`.** §11 is the canonical prose
+  schema and still enumerates six tables. It already carries the plan4 precedent (*"Plan4 adds a
+  `kind` column to `approvals` … a migration, not a new table"*); it needs the equivalent line
+  stating that plan1 Step 1.1.2 adds `jira_actions` as a migration on the same store. **This is
+  outside Plan Steward scope** — `docs/context.md` is not a plan file — so it is handed back rather
+  than edited here. Until it lands, one canonical data-model surface remains stale.
 - No code, config, test, or `PROGRESS.md` change — Plan Steward edits plans only.
 - `plan0` §B.6 deliberately untouched (see §4).
 - No push, no merge, no tag. Jay merges, then tags **`plan-set-jarvis-v6`** and **pushes the tag**
