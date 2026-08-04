@@ -163,9 +163,9 @@ FixValidationLoop produces a candidate on local branch wc/<TICKET>
         NO LLM IN THE WAIT PATH — plain orchestrator coroutine only
   → fetch results:
         GET /api/v2/test_config_results?test_config_id=<ID>      → newest result id
-        GET /api/v2/test_results?test_config_result_id=<id>      → step result + status
-        GET /api/v2/test_results/{test_result_id}/logs?limit=1000 → entries (message, severity,
-                                                                    message_type, image_id)
+        GET /api/v2/test_results?test_config_result_id=<id>      → run_id + step status
+        GET /api/v2/test_results/{run_id}/logs?limit=1000        → entries (message, severity,
+                                                                   message_type, image_id)
         GET /api/v2/test_results/{run_id}/screenshots            → screenshot list for the run
         GET /api/v2/screenshots/{screenshot_id}                  → PNG (walk-back logic reused)
   → ASSERT  run log "Using Git commit SHA: '<sha>'" == pushed SHA (UP-24 post-check)
@@ -181,7 +181,9 @@ Force-push is safe **because** the branch is disposable and the lock serialises 
 - **Auth:** `POST /api/v2/auth` with `client_id` / `client_secret` from JARVIS **API Access** → bearer
   token, **~10-minute expiry** → cache in-process and refresh on expiry.
 - **Results/evidence chain:** the **five** `GET` calls listed in §2.3.4 — config results → step
-  status → logs → **screenshot list for the run** → PNG. Fetching a PNG requires the
+  status → logs → **screenshot list for the run** → PNG. **One identifier, one name:** `{run_id}` in
+  the `/logs` and `/screenshots` routes **is** the test-result id returned by the second call —
+  there is no separate run identifier to look up. Fetching a PNG requires the
   `/test_results/{run_id}/screenshots` listing first; `image_id` from a log entry is the
   **production** DAI's path, not this one. **`GET /testconfiguration/{id}/results`
   404s on this DAI** — use `/api/v2/test_config_results?test_config_id=…` instead.

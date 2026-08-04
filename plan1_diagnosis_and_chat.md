@@ -82,6 +82,7 @@ The one place all Anthropic calls go through — **every reasoning call uses `se
 | Transport retry (`tenacity`) | 3 attempts per physical request | 429/5xx/connection/timeout only; never 4xx, never validation errors |
 | Semantic repair (this step) | **exactly 1** per structured call | malformed/invalid tool output only |
 | Fix loop (`plan2` §2.6) | **`max_attempts: 3`** per ticket | a failed *validation run*, not a malformed response |
+
 **Verification (all clients):** `pytest` with `pytest-httpx` mocks; **(User)** one live smoke per client from the VM.
 **DoD:** four clients green on mocks + live smokes; token caching works; cost meter matches a hand-computed example.
 

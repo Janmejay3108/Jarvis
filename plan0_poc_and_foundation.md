@@ -59,9 +59,8 @@
 **Results/evidence chain (v2) — five endpoints:**
 ```
 GET /api/v2/test_config_results?test_config_id=<ID>   → newest result id
-GET /api/v2/test_results?test_config_result_id=<id>   → step result + status
-GET /api/v2/test_results/{test_result_id}/logs?limit=1000
-                                                     → entries (message, severity, message_type, image_id)
+GET /api/v2/test_results?test_config_result_id=<id>   → run_id + step status
+GET /api/v2/test_results/{run_id}/logs?limit=1000     → entries (message, severity, message_type, image_id)
 GET /api/v2/test_results/{run_id}/screenshots         → the run's screenshot list (required before the PNG)
 GET /api/v2/screenshots/{screenshot_id}               → PNG (PoC-2 walk-back logic reused)
 ```
