@@ -166,6 +166,7 @@ FixValidationLoop produces a candidate on local branch wc/<TICKET>
         GET /api/v2/test_results?test_config_result_id=<id>      → step result + status
         GET /api/v2/test_results/{test_result_id}/logs?limit=1000 → entries (message, severity,
                                                                     message_type, image_id)
+        GET /api/v2/test_results/{run_id}/screenshots            → screenshot list for the run
         GET /api/v2/screenshots/{screenshot_id}                  → PNG (walk-back logic reused)
   → ASSERT  run log "Using Git commit SHA: '<sha>'" == pushed SHA (UP-24 post-check)
   → status PASSED | FAILED | ERROR | CANCELLED
@@ -179,7 +180,10 @@ Force-push is safe **because** the branch is disposable and the lock serialises 
 
 - **Auth:** `POST /api/v2/auth` with `client_id` / `client_secret` from JARVIS **API Access** → bearer
   token, **~10-minute expiry** → cache in-process and refresh on expiry.
-- **Results chain:** the four `GET` calls listed in §2.3.4. **`GET /testconfiguration/{id}/results`
+- **Results/evidence chain:** the **five** `GET` calls listed in §2.3.4 — config results → step
+  status → logs → **screenshot list for the run** → PNG. Fetching a PNG requires the
+  `/test_results/{run_id}/screenshots` listing first; `image_id` from a log entry is the
+  **production** DAI's path, not this one. **`GET /testconfiguration/{id}/results`
   404s on this DAI** — use `/api/v2/test_config_results?test_config_id=…` instead.
 - **Trigger:** `POST /task_scheduler_service/api/v1/task_instances/{test_config_id}` → **201** with a
   `task_instance_id`. A single transient **500** was observed and the identical retry returned 201;

@@ -56,11 +56,13 @@
 
 **Auth (JARVIS DAI):** `POST /api/v2/auth` with `client_id` / `client_secret` from JARVIS **API Access** → bearer token, **~10-minute expiry**, cached in-process and refreshed on expiry. This is **not** the production DAI's scheme (OAuth2 client-credentials against the Keycloak realm) — the two instances must never share a client, token cache or base URL.
 
-**Results chain (v2):**
+**Results/evidence chain (v2) — five endpoints:**
 ```
 GET /api/v2/test_config_results?test_config_id=<ID>   → newest result id
 GET /api/v2/test_results?test_config_result_id=<id>   → step result + status
-GET /api/v2/test_results/{test_result_id}/logs        → entries (message, severity, message_type, image_id)
+GET /api/v2/test_results/{test_result_id}/logs?limit=1000
+                                                     → entries (message, severity, message_type, image_id)
+GET /api/v2/test_results/{run_id}/screenshots         → the run's screenshot list (required before the PNG)
 GET /api/v2/screenshots/{screenshot_id}               → PNG (PoC-2 walk-back logic reused)
 ```
 
@@ -73,7 +75,7 @@ GET /api/v2/screenshots/{screenshot_id}               → PNG (PoC-2 walk-back l
 
 **Actions:**
 1. **(User)** — **done.** Provided and recorded in the table above: validation repo URL + PAT (push rights to `Enovia`), JARVIS DAI base URL + v2 client credentials, the per-suite `TEST_CONFIG_ID` (recorded in `tracks/enovia/test_config_registry.yaml`, D3), and the **trigger API** spec (trigger a test config by ID — the existing, already-tested API). Confirmed: the test config's git connection points at the validation repo and **syncs at run start** (not a cached clone), and the SUT connection is prebuilt.
-2. Agent: write `scripts/poc_jarvis_validation.py` — pull the working copy; commit a trivial change; **force-push** `wc/<TICKET>:refs/heads/Enovia` to the `agentic-eggplant-automation` remote; **assert `git ls-remote agentic-eggplant-automation refs/heads/Enovia` equals the pushed SHA**; call the trigger API with the registry's `test_config_id`; detect completion via `poll_backoff`; walk the four-call v2 results chain to fetch status + logs + screenshots; **assert the run log's `Using Git commit SHA: '<sha>'` equals the pushed SHA**; print the full timeline (push→assert→trigger→complete→assert) with durations.
+2. Agent: write `scripts/poc_jarvis_validation.py` — pull the working copy; commit a trivial change; **force-push** `wc/<TICKET>:refs/heads/Enovia` to the `agentic-eggplant-automation` remote; **assert `git ls-remote agentic-eggplant-automation refs/heads/Enovia` equals the pushed SHA**; call the trigger API with the registry's `test_config_id`; detect completion via `poll_backoff`; walk the five-endpoint v2 results/evidence chain to fetch status + logs + screenshots; **assert the run log's `Using Git commit SHA: '<sha>'` equals the pushed SHA**; print the full timeline (push→assert→trigger→complete→assert) with durations.
 3. **(User)** run it; paste output. Time the cycle — this is the per-attempt validation latency.
 **Verification:** a code push demonstrably reaches the SUT run (the triggered run executes the pushed `Enovia` state, evidenced by the commit SHA in the run log) and its results are fetched programmatically via the v2 chain, using backoff polling (not naive tight polling).
 **DoD:** push → SHA assert → trigger → completion-detected-without-busy-polling → results → executed-SHA assert, all proven; cycle time recorded in `poc_results.md`; mechanism recorded as `JARVIS_COMPLETION_MODE=poll_backoff` for plan2 Phase 2.5 to consume.
