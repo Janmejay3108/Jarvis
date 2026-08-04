@@ -150,19 +150,21 @@ a false PASS, which is the worst possible failure mode for this system.
 
 ```
 FixValidationLoop produces a candidate on local branch wc/<TICKET>
-  → derive suite from the affected file path
+  → validation_suite_of(run) → the suite that OWNS THE FAILING TEST
+        (failing test named in the DAI log → JIRA number→suite range → raise)
+        NEVER inferred from the affected file path — most fixes land in a shared handler
   → look up test_config_id for that suite (D3 registry)
   → render <Suite>_AgentDispatcher.script from the template with the target (D4/D5) → commit
   → git push agentic-eggplant-automation wc/<TICKET>:refs/heads/Enovia --force   (UNDER THE TRACK LOCK)
   → ASSERT  git ls-remote agentic-eggplant-automation refs/heads/Enovia == pushed SHA
                                                                   (UP-24 pre-check, mandatory)
-  → trigger the test config by ID (existing trigger API)
+  → POST /task_scheduler_service/api/v1/task_instances/{test_config_id}  → 201 + task_instance_id
   → wait per JARVIS_COMPLETION_MODE (poll_backoff day 1 → webhook once registered)
         NO LLM IN THE WAIT PATH — plain orchestrator coroutine only
   → fetch results:
         GET /api/v2/test_config_results?test_config_id=<ID>      → newest result id
         GET /api/v2/test_results?test_config_result_id=<id>      → step result + status
-        GET /api/v2/test_results/{test_result_id}/logs           → entries (message, severity,
+        GET /api/v2/test_results/{test_result_id}/logs?limit=1000 → entries (message, severity,
                                                                     message_type, image_id)
         GET /api/v2/screenshots/{screenshot_id}                  → PNG (walk-back logic reused)
   → ASSERT  run log "Using Git commit SHA: '<sha>'" == pushed SHA (UP-24 post-check)
@@ -177,8 +179,12 @@ Force-push is safe **because** the branch is disposable and the lock serialises 
 
 - **Auth:** `POST /api/v2/auth` with `client_id` / `client_secret` from JARVIS **API Access** → bearer
   token, **~10-minute expiry** → cache in-process and refresh on expiry.
-- **Results chain:** the four `GET` calls listed in §2.3.4.
-- **Trigger:** the existing, already-tested API (trigger a test config by ID).
+- **Results chain:** the four `GET` calls listed in §2.3.4. **`GET /testconfiguration/{id}/results`
+  404s on this DAI** — use `/api/v2/test_config_results?test_config_id=…` instead.
+- **Trigger:** `POST /task_scheduler_service/api/v1/task_instances/{test_config_id}` → **201** with a
+  `task_instance_id`. A single transient **500** was observed and the identical retry returned 201;
+  do not treat one 500 as a contract error.
+- All JARVIS DAI endpoints in §2.3.4/§2.3.5 were **proven live 2026-08-02** during plan0 B.7a.
 - **Dual-auth warning.** The **production** DAI evidence endpoints in §3 (`/ai/runlogs/{runid}`,
   `/api/v2/screenshots/{image_id}`, OAuth2 client-credentials against the Keycloak realm) are
   **unchanged** and belong to the **production** DAI, not the JARVIS DAI. The two instances use
