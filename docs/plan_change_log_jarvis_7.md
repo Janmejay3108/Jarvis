@@ -31,7 +31,7 @@ are all intact — counts verified below. The reasoning core is the product.
 | **H8** | The `anthropic` floor is `>=0.120.2,<1`; `0.40` lacks the adaptive-thinking and forced-tool shapes Step 1.2.4 needs. | Step 1.2.4 drift ruling |
 | **H9** | `settings.working_copy_path` is the **single authority** for the Enovia working copy, resolved as `data/working_copy/enovia-plm-test-automation`. `C:\agent\repo` is superseded. | `config/enovia.yaml` L5 |
 | **H10** | The `validation` config block has **no** timeout key; the run timeout is `jarvis.run_timeout` (7200s). | `config/enovia.yaml` L66, L78–81 |
-| **H11** | JARVIS DAI trigger/logs/results endpoints proven live 2026-08-02; `/testconfiguration/{id}/results` **404s**; a single transient 500 is not a contract error. | ORIENTATION §3.4 (B.7a) |
+| **H11** | JARVIS DAI trigger/logs/results endpoints proven live 2026-08-02; `/testconfiguration/{id}/results` **404s**; a single transient 500 is not a contract error. The evidence chain is **five** endpoints, not four — `GET /api/v2/test_results/{run_id}/screenshots` must be walked **before** `GET /api/v2/screenshots/{id}`, because on this DAI a PNG cannot be fetched straight from a log entry's `image_id`. | ORIENTATION §3.4 (B.7a) |
 | **H12** | Only the **two proven** JIRA→suite ranges may be encoded. The appendix's 14-suite "approximate" table contradicts them and needs a **(User)** ruling. | ORIENTATION §6.4 |
 | **H13** | The validation suite is the suite that **owns the failing test**, never the changed file's path. | M2, plan_master §6 invariant 13 |
 
@@ -46,10 +46,19 @@ are all intact — counts verified below. The reasoning core is the product.
 | 3 | `7fdddcb` | `plan0` B.1 actions 2–3, B.4 action 1, Gate 0b-VM | Added `version = "0.1.0"`; bumped the `anthropic` floor; removed the non-existent `validation` timeout key and pointed at `jarvis.run_timeout`; replaced the `C:\agent\repo` literal with `settings.working_copy_path`. | H7, H8, H9, H10 |
 | 4 | `063ff3c` | `plan2` Step 2.5.2 | Enumerated the proven trigger and log endpoints from the canonical §2.3.5 and recorded the 404 route. | H11 |
 | 5 | `2ee7548` | `plan1` Step 1.3.2 | Added a blocking constraint: only the two proven ranges may be encoded; the appendix table is contradictory and requires a ruling; an unresolved number must **raise**. | H12, H13 |
+| 6 | `15d42d0` | `plan_master` §2.3.4/§2.3.5, `plan2` §2.5.2, `plan0` B.7a | **Correction to fix 1.** Added the missing `GET /api/v2/test_results/{run_id}/screenshots` call and renamed the chain to the **five-endpoint results/evidence chain** in all three places that enumerate it, plus `ValidationGate` step 6 and the `poc_jarvis_validation.py` spec. | H11 |
 
-**No edit was made without a rule authorising it.** `plan3_lifecycle_rollout.md` and `plan4.md`
-were searched and needed no change — neither defines a Claude client signature, a DAI endpoint, or
-the working-copy path.
+**No edit was made without a rule authorising it.** `plan4.md` was searched and needed no change —
+it defines no Claude client signature, DAI endpoint, or working-copy path.
+`plan3_lifecycle_rollout.md` §1 L13 *references* the chain ("the v2 results chain + screenshots
+produced by the gate (plan2 §2.5.2)") but delegates rather than enumerating, and names no count, so
+it stays correct without an edit and was deliberately left alone.
+
+**Scope note on fix 6.** The brief named `plan_master` §2.3.4/§2.3.5 and `plan2` §2.5.2. `plan0`
+B.7a was found to enumerate the same chain — also four calls, also missing `?limit=1000` — and the
+`poc_jarvis_validation.py` spec at B.7a action 2 named the "four-call v2 results chain". Correcting
+the canonical definition while leaving two stale copies is the M5 defect class the set-wide
+consistency rule exists to prevent, so both were folded into the same commit.
 
 ---
 
@@ -98,10 +107,33 @@ Nothing reduced.
 | `derive suite from the affected` across all plans | 0 | **0** |
 | `anthropic>=0.40` across all plans | 0 | **0** (now `>=0.120.2,<1`) |
 | `output_model` present in `plan1` | ≥1 | **2** |
+| `four-call` / ``four `GET` `` across all plans | 0 | **0** |
+| `test_results/{run_id}/screenshots` enumerated | 3 plans | **4 hits** — `plan0` L65, `plan2` L131, `plan_master` L169 + L185 |
 | `C:\agent\repo` outside the historical PoC §A | 0 | **0** — 3 residual hits are (User) PoC records at L111/L114/L131, deliberately unchanged |
+| Headings vs base, all six plans | Δ 0 | **Δ 0** |
+| Markdown fences balanced, all six plans | even | **even** |
+| Plan files still valid UTF-8 | 6/6 | **6/6** |
 | `git diff --check` | clean | **clean** |
-| Plan files still valid UTF-8 | 4/4 | **4/4** |
-| Diff totals | — | 4 files, +41 / −16 |
+
+### Diff totals
+
+| Scope | Files | Lines |
+|---|---|---|
+| **Plan files only** (vs pass base `4d08ded`) | 4 | **+51 / −20** |
+| **Plans + Decision 005** (vs `master`, excluding this log) | 5 | **+138 / −20** |
+
+Both figures **exclude this change log**, deliberately. A total that counts the document stating it
+changes every time the document is edited and is stale the moment it is written; the two scopes
+above are stable and independently reproducible:
+
+```
+git diff --shortstat 4d08ded..HEAD -- 'plan*.md'
+git diff --shortstat master...HEAD -- 'plan*.md' 'docs/agent/decisions/*'
+```
+
+The full branch including this log is 6 files; that count is left unstated for the reason above.
+The earlier entry in this table read *"4 files, +41 / −16"*. That was the plan-only total **before**
+fix 6 and it did not say so; it is superseded here.
 
 ---
 
