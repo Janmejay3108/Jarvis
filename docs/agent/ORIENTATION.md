@@ -6,9 +6,9 @@ happens next.*
 
 **Read this, then `docs/context.md`, then `PROGRESS.md`.**
 
-**Last updated:** 2026-08-02, after `GATE 0b-LOCAL`. Sections marked ⏱ go stale fastest — update
-them in the same sitting as any merge. A fresh session reading a stale table is how confusion
-restarts.
+**Last updated:** 2026-08-04, after the Plan1 post-1.2.3 Jira write follow-up. Sections marked ⏱ go
+stale fastest — update them in the same sitting as any merge. A fresh session reading a stale
+table is how confusion restarts.
 
 ---
 
@@ -318,7 +318,7 @@ and an empty prompt `.md` is a prompt with no instructions. Seven were deleted b
 
 ## 5.2 Repo state ⏱
 
-154 tracked files. Repo root **is** project root. `.gitattributes` present, `.md` LF-normalised,
+191 tracked files. Repo root **is** project root. `.gitattributes` present, `.md` LF-normalised,
 `.env` untracked. Tags `plan-set-jarvis-v1` … `v4` pushed and resolving.
 
 ```
@@ -332,16 +332,16 @@ Jarvis/
 │               maintenance.md  later-enhancements.md  poc_execution_guide.md
 │               gate_0b_local_validation_report.md  plan_change_log_jarvis{,_2,_3,_4}.md
 │               agent/  README.md  briefs/  reviews/  decisions/
-├── src/        config.py · orchestrator/{state_store,events,track_loader}.py
-│               integrations/{dai_client,jira_client}.py · evidence/packager.py
+├── src/        config.py · models/run.py
+│               orchestrator/{events,jira_actions,locks,pipeline,queue,state_store,track_loader}.py
+│               integrations/{bitbucket_client,dai_client,jira_client}.py · evidence/packager.py
 │               static/{sensetalk_parser,handler_map,call_graph,ripgrep_search,vocabulary,lint}.py
-│               (agentic/ analysis/ api/ chat/ evals/ flywheel/ models/ static/ utils/ — empty stubs)
+│               (later-step modules under agentic/ analysis/ api/ chat/ evals/ flywheel/ remain empty stubs)
 ├── scripts/    poc_dai.py  probe_claude.py  test_integrations.py
 │               build_handler_map.py  build_vocabulary.py
 │               setup_vm_jarvis.ps1  clone_repo.ps1
-├── tests/      test_config  test_evidence  test_state_store  test_sensetalk_parser
-│               test_handler_map  test_call_graph  test_ripgrep_search  test_vocabulary
-│               test_lint  test_build_handler_map
+├── tests/      19 test modules: config, evidence, run/state/event lifecycle, queue/locks/pipeline,
+│               Jira/Bitbucket/DAI clients, textguard, and the static-analysis layer
 ├── data/       trajectories/  working_copy/  agent_runs/   (.gitkeep only)
 └── tracks/enovia/  context.md + 5 appendices  context_seed.md
                     ticket_findings.md  ticket_findings/ (9)  test_config_registry.yaml
@@ -384,10 +384,9 @@ headings lost.** Every threshold, `max_attempts: 3`, `callers_pass`, `BudgetGuar
 
 ## 6.1 Immediate
 
-**Plan1 — the diagnosis engine and chat MVP.** No code changes to Enovia; pure analysis. Roughly:
-pipeline skeleton and queue → the four integration clients wired → retrieval and the two-tier
-context layer → the diagnosis prompt and `Diagnosis` schema → chat API and SSE → the eval harness.
-Read `plan1` in full, plus `docs/context.md` §6 and §12, before shaping the first brief.
+**Plan1 Step 1.2.4 — `claude_client.py` v2 is next.** Steps 1.1.1 through 1.2.3 and the post-1.2.3
+Jira write follow-up are complete. Read Step 1.2.4 in full, plus `plan_master` §2.3, §4, §5 and
+`docs/context.md` §6 and §12, before shaping the brief.
 
 ## 6.2 Jay's parallel tasks (none block the build)
 
