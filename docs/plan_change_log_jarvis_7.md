@@ -34,6 +34,7 @@ are all intact — counts verified below. The reasoning core is the product.
 | **H11** | JARVIS DAI trigger/logs/results endpoints proven live 2026-08-02; `/testconfiguration/{id}/results` **404s**; a single transient 500 is not a contract error. The evidence chain is **five** endpoints, not four — `GET /api/v2/test_results/{run_id}/screenshots` must be walked **before** `GET /api/v2/screenshots/{id}`, because on this DAI a PNG cannot be fetched straight from a log entry's `image_id`. | ORIENTATION §3.4 (B.7a) |
 | **H12** | Only the **two proven** JIRA→suite ranges may be encoded. The appendix's 14-suite "approximate" table contradicts them and needs a **(User)** ruling. | ORIENTATION §6.4 |
 | **H13** | The validation suite is the suite that **owns the failing test**, never the changed file's path. | M2, plan_master §6 invariant 13 |
+| **H14** | **One identifier, one name.** The `{run_id}` in `/api/v2/test_results/{run_id}/logs` and `…/screenshots` **is** the test-result id returned by the second results call. There is no separate run identifier. The plans previously wrote `{test_result_id}` for logs and `{run_id}` for screenshots on adjacent lines of the same chain — a Part-7 "pairs that look alike" trap. | ORIENTATION §3.4 L201–L202 |
 
 ---
 
@@ -47,6 +48,7 @@ are all intact — counts verified below. The reasoning core is the product.
 | 4 | `063ff3c` | `plan2` Step 2.5.2 | Enumerated the proven trigger and log endpoints from the canonical §2.3.5 and recorded the 404 route. | H11 |
 | 5 | `2ee7548` | `plan1` Step 1.3.2 | Added a blocking constraint: only the two proven ranges may be encoded; the appendix table is contradictory and requires a ruling; an unresolved number must **raise**. | H12, H13 |
 | 6 | `15d42d0` | `plan_master` §2.3.4/§2.3.5, `plan2` §2.5.2, `plan0` B.7a | **Correction to fix 1.** Added the missing `GET /api/v2/test_results/{run_id}/screenshots` call and renamed the chain to the **five-endpoint results/evidence chain** in all three places that enumerate it, plus `ValidationGate` step 6 and the `poc_jarvis_validation.py` spec. | H11 |
+| 7 | `00bad76` | `plan1` Step 1.2.4, `plan_master` §2.3.4/§2.3.5, `plan2` §2.5.2, `plan0` B.7a | **Corrections from the review of fixes 1–6.** (a) Blank line after the three-boundaries table so **Verification** and **DoD** render as paragraphs rather than being absorbed as table rows by GFM. (b) Standardised `{test_result_id}` → `{run_id}` in all three chain enumerations, stated that the second call yields the `run_id`, and added the explicit *one identifier, one name* note. Code-fence arrow columns repadded (65 in `plan_master`, 54 in `plan0`). | H14 |
 
 **No edit was made without a rule authorising it.** `plan4.md` was searched and needed no change —
 it defines no Claude client signature, DAI endpoint, or working-copy path.
@@ -62,13 +64,38 @@ consistency rule exists to prevent, so both were folded into the same commit.
 
 ---
 
-## 3. One error made and corrected inside the pass
+## 3. Errors made inside the pass
+
+### 3.1 Caught by the author, before the commit
 
 Fix 3's first attempt **replaced** the *"Deliberately absent: `chromadb`, `sentence-transformers`,
 Microsoft Graph SDK"* line with the new `version` note instead of adding alongside it — deleting a
 real constraint that keeps the vector-DB dependencies out of the project. Caught immediately by the
-post-edit grep, restored before the commit, and both lines are present at plan0 L293–294. This is
+post-edit grep, restored before the commit, and both lines are present at plan0 **L294–295**. This is
 precisely the failure mode M10 describes: a deletion hiding inside an otherwise reasonable edit.
+
+### 3.2 Missed by the author, caught by review
+
+Three defects survived fixes 1–6 and were found only by the review of this branch. All three are
+closed by fix 7 and by this log:
+
+1. **A broken table.** The three-boundaries table added by fix 2 was inserted directly above the
+   pre-existing **Verification** and **DoD** lines with no blank line between them. GFM continues a
+   table until a blank line, so both lines would have rendered as table rows. A structural check
+   that counts *headings* does not see this; nothing in the pass would have caught it.
+2. **Two names for one identifier.** Fix 6 added a `{run_id}` line directly beneath a pre-existing
+   `{test_result_id}` line in the same chain, in all three enumerations — exactly the Part-7
+   "pairs that look alike and are not" trap, introduced while fixing a different defect. See H14.
+3. **Wrong evidence in this log.** §5 claimed *"3 residual hits at L111/L114/L131"* for
+   `C:\agent\repo`; there are **4**, at L112/L115/L132/L356. The conclusion held, but the cited
+   numbers did not — the failure mode *"no number without a traceable source"* exists to prevent.
+   The `plan0 L293–294` citation in §3.1 was likewise off by one and is corrected above.
+
+**The lesson for the next pass.** Every one of these is a *line-level* defect in text the pass
+itself wrote, and the pass's own verification was blind to all three: heading counts, fence parity,
+protected-term counts and UTF-8 validity are all insensitive to them. Line numbers cited in a change
+log must be re-derived **after the final commit**, never carried forward from the edit that
+introduced them.
 
 ---
 
@@ -108,8 +135,10 @@ Nothing reduced.
 | `anthropic>=0.40` across all plans | 0 | **0** (now `>=0.120.2,<1`) |
 | `output_model` present in `plan1` | ≥1 | **2** |
 | `four-call` / ``four `GET` `` across all plans | 0 | **0** |
-| `test_results/{run_id}/screenshots` enumerated | 3 plans | **4 hits** — `plan0` L65, `plan2` L131, `plan_master` L169 + L185 |
-| `C:\agent\repo` outside the historical PoC §A | 0 | **0** — 3 residual hits are (User) PoC records at L111/L114/L131, deliberately unchanged |
+| `test_results/{run_id}/screenshots` enumerated | 3 plans | **4 hits** — `plan0` L64, `plan2` L131, `plan_master` L169 + L187 |
+| `{test_result_id}` anywhere in the plans | 0 | **0** — unified on `{run_id}` (H14) |
+| Blank line terminating the boundary table | yes | **yes** — table rows `plan1` L82–L84, blank L85 |
+| `C:\agent\repo` occurrences in `plan0` | 4, none contradictory | **4** — L112 / L115 / L132 are **(User)** records inside *deferred* PoC steps A.3 and A.4; **L356** is the explicit *"the older `C:\agent\repo` literal is **superseded**"* note in B.4. No unresolved contradiction remains |
 | Headings vs base, all six plans | Δ 0 | **Δ 0** |
 | Markdown fences balanced, all six plans | even | **even** |
 | Plan files still valid UTF-8 | 6/6 | **6/6** |
@@ -119,8 +148,8 @@ Nothing reduced.
 
 | Scope | Files | Lines |
 |---|---|---|
-| **Plan files only** (vs pass base `4d08ded`) | 4 | **+51 / −20** |
-| **Plans + Decision 005** (vs `master`, excluding this log) | 5 | **+138 / −20** |
+| **Plan files only** (vs pass base `4d08ded`) | 4 | **+56 / −23** |
+| **Plans + Decision 005** (vs `master`, excluding this log) | 5 | **+143 / −23** |
 
 Both figures **exclude this change log**, deliberately. A total that counts the document stating it
 changes every time the document is edited and is stale the moment it is written; the two scopes
