@@ -29,7 +29,9 @@
 
 # Local IDE / tooling state — machine-specific, never shared
 .claude/settings.local.json
+.github/
 
 # OS noise
 Thumbs.db
 Desktop.ini
+
