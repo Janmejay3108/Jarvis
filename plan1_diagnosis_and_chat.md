@@ -91,6 +91,15 @@ The one place all Anthropic calls go through — **every reasoning call uses `se
 
 ### Step 1.3.1 — Wire `handler_map` / `sensetalk_parser` / `call_graph` / `ripgrep_search` (built in plan0 §B.4) into the pipeline; reads come from the **local working copy** (fast) with Bitbucket `read_file` as fallback for paths missing locally.
 ### Step 1.3.2 — `_locate_test` + `_suite_of`: port the JIRA-number→suite ranges from `context.md` (e.g. 2864–2950 → EngineeringCentral, 2975–2996 → Search, …) into `config/enovia.yaml`; resolver returns the `TestCases/...script` repo path.
+
+> **Only *proven* ranges may be encoded. ⛔ Blocked pending a (User) ruling.** `config/enovia.yaml`
+> currently carries exactly two ranges, both confirmed against real tickets: **2864–2950 →
+> EngineeringCentral** and **2975–2996 → Search**. `tracks/enovia/context_appendix_finding_things.md`
+> carries a 14-suite table explicitly marked *"approximate filename clusters"* which **contradicts**
+> the proven range (it gives 2785–2951 for EngineeringCentral). **Do not encode any row from that
+> table until Jay rules on it.** A wrong range points `validation_suite_of` at the wrong suite, and
+> per plan2 §2.5.0 that produces a verdict from a suite that does not own the failing test — the
+> M2 failure mode. An unresolved number must **raise**, never fall back to a guessed range.
 ### Step 1.3.3 — `src/analysis/context_packer.py` [supports UP-1]
 Token-budgeted assembly for single-shot mode AND for the tool-loop's initial message: priority order = failing handler ±80 lines → full test script → chain handler bodies (trim to defs+regions of interest if over budget) → blast-radius **signatures only** → relevant `context.md` family sections → trimmed logs (head 60 / tail 40). Hard cap from `llm.max_context_tokens` (estimate via chars/4). Unit tests with oversized fixtures.
 
