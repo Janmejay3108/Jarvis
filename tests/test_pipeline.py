@@ -645,6 +645,81 @@ async def test_cancelled_jira_write_leaves_replayable_pending_action(
     assert sum(call.startswith("jira.post_comment:") for call in harness.calls) == 1
 
 
+@pytest.mark.parametrize(
+    ("error", "error_type"),
+    [
+        (TypeError("adapter type defect"), "TypeError"),
+        (AttributeError("adapter attribute defect"), "AttributeError"),
+        (AssertionError("adapter assertion defect"), "AssertionError"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_jira_write_programming_defect_fails_run_with_pending_action(
+    tmp_path: Path,
+    error: BaseException,
+    error_type: str,
+) -> None:
+    harness = await _harness(tmp_path, comment_error=error)
+
+    result = await harness.pipeline.execute(harness.run)
+
+    assert result.status is RunStatus.failed
+    assert sum(call.startswith("jira.post_comment:") for call in harness.calls) == 1
+    assert not any(call.startswith("jira.add_label:") for call in harness.calls)
+
+    reopened = StateStore(harness.store.db_path)
+    await reopened.initialize()
+    actions = await reopened.list_jira_actions(result.run_id)
+    assert len(actions) == 1
+    assert actions[0]["operation"] == "post_comment"
+    assert actions[0]["state"] == "pending"
+    assert actions[0]["attempts"] == 1
+    assert actions[0]["check_result"] == "unknown"
+
+    steps = await reopened.list_steps(result.run_id)
+    post_step = steps[-1]
+    assert post_step["name"] == "post_diagnosis"
+    assert post_step["status"] == "failed"
+    assert post_step["detail"] == "Publishing the diagnosis result"
+    assert post_step["error"] == error_type
+
+    persisted = await reopened.list_events(result.run_id)
+    event_types = [event["type"] for event in persisted]
+    assert "step.failed" in event_types
+    assert "run.failed" in event_types
+    assert "run.completed" not in event_types
+    assert persisted[-1]["payload"]["summary"]["reason"] == "pipeline_error"
+
+    stream = EventBus(reopened).subscribe(result.run_id)
+    replayed = [await anext(stream) for _event in persisted]
+    await stream.aclose()
+    action_events = [
+        event for event in replayed if event.type == "jira.action.updated"
+    ]
+    assert [event.payload["state"] for event in action_events] == [
+        "pending",
+        "pending",
+    ]
+    assert [event.payload["attempts"] for event in action_events] == [0, 1]
+    assert all(
+        set(event.payload)
+        == {
+            "action_id",
+            "operation",
+            "state",
+            "check_result",
+            "attempts",
+            "created_at",
+            "updated_at",
+        }
+        for event in action_events
+    )
+    serialized = json.dumps(
+        {"actions": actions, "steps": steps, "events": persisted}
+    )
+    assert str(error) not in serialized
+
+
 @pytest.mark.asyncio
 async def test_jira_publication_errors_are_redacted_from_rows_events_and_step_detail(
     tmp_path: Path,
@@ -652,7 +727,14 @@ async def test_jira_publication_errors_are_redacted_from_rows_events_and_step_de
     secret = (
         "pat-secret https://user:password@jira.example.test body-secret raw-response"
     )
-    harness = await _harness(tmp_path, comment_error=RuntimeError(secret))
+    request = httpx.Request(
+        "POST",
+        "https://jira.example.test/rest/api/2/issue/TESTAUTOMA-8055/comment",
+    )
+    harness = await _harness(
+        tmp_path,
+        comment_error=httpx.WriteError(secret, request=request),
+    )
 
     result = await harness.pipeline.execute(harness.run)
 

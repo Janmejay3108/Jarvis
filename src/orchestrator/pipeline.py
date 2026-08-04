@@ -236,7 +236,7 @@ class DiagnosisPipeline:
 				if 400 <= error.response.status_code < 500
 				else "uncertain"
 			)
-		except Exception:  # noqa: BLE001
+		except httpx.RequestError:
 			state = "uncertain"
 		else:
 			state = "succeeded"
