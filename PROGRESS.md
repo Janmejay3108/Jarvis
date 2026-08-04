@@ -90,3 +90,4 @@ as **O8** against Gate 1. **Phase 0.B may begin.** *(Ruled by Jay, 2026-07-28 / 
 [x] plan1/1.1/1.1.3 — 2026-08-03 — Per-track FIFO diagnosis queues and native cross-process validation locks landed; 95 tests passed, 2 skipped, and Ruff clean.
 [x] plan1/1.2/1.2.1 — 2026-08-03 — Jira DC REST v2 client hardened with retry-safe reads, single-attempt uncertain writes, complete REST surface validation, and persisted reconciliation design; 119 tests passed, 2 skipped, and Ruff clean.
 [x] plan1/1.2/1.2.2 — 2026-08-04 — Read-only Bitbucket Server/DC client landed with encoded raw-file reads, server-driven pagination, retry-safe reads, lifecycle ownership, and malformed-response validation; 147 tests passed, 2 skipped, and Ruff clean.
+[+] plan1/1.1/1.1.2 — 2026-08-04 — Jira write exception boundary narrowed: transport failures remain uncertain and non-terminal, while programming defects fail safely with a durable pending action; 150 tests passed, 2 skipped, and Ruff clean.
