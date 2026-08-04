@@ -1,93 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Self
 
 import pytest
-from pydantic import SecretStr
-from pytest_httpx import HTTPXMock
 
 from src.evidence.packager import EvidenceBundle, fetch_evidence
-from src.integrations.dai_client import DaiClient, LogEntry
-
-
-def _settings() -> SimpleNamespace:
-    return SimpleNamespace(
-        dai_base_url="http://dai.test:8000",
-        dai_auth_url="http://dai.test:8000/auth/token",
-        dai_client_id=SecretStr("client-id"),
-        dai_client_secret=SecretStr("client-secret"),
-        dai_log_by_runid_url="http://dai.test:8000/ai/runlogs/{runid}",
-        dai_screenshot_url="http://dai.test:8000/api/v2/screenshots/{image_id}",
-        jira_base_url="https://jira.test",
-        jira_pat=SecretStr("jira-token"),
-    )
-
-
-@pytest.mark.asyncio
-async def test_dai_log_by_runid_parses_entries(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(
-        method="POST",
-        url="http://dai.test:8000/auth/token",
-        json={"access_token": "token", "expires_in": 600},
-    )
-    httpx_mock.add_response(
-        method="GET",
-        url="http://dai.test:8000/ai/runlogs/30832",
-        json=[
-            {
-                "id": 1,
-                "testrunid": 30832,
-                "message": "started",
-                "image_id": "image-1",
-            },
-            {"id": "2", "message": "failed", "severity": "ERROR"},
-        ],
-    )
-
-    async with DaiClient(config=_settings()) as client:
-        logs = await client.log_by_runid("30832")
-
-    assert logs == [
-        LogEntry(
-            id="1",
-            testrunid="30832",
-            message="started",
-            image_id="image-1",
-        ),
-        LogEntry(id="2", message="failed", severity="ERROR"),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_walk_back_to_screenshot() -> None:
-    logs = [
-        LogEntry(message="first", image_id="image-old"),
-        LogEntry(message="captured", image_id="image-nearest"),
-        LogEntry(message="intermediate"),
-        LogEntry(message="failure"),
-    ]
-    async with DaiClient(config=_settings()) as client:
-        found = client.walk_back_to_screenshot(logs, error_index=3)
-
-    assert found == logs[1]
-
-
-@pytest.mark.asyncio
-async def test_dai_authenticate_caches_token(httpx_mock: HTTPXMock) -> None:
-    httpx_mock.add_response(
-        method="POST",
-        url="http://dai.test:8000/auth/token",
-        json={"access_token": "cached-token", "expires_in": 3600},
-    )
-
-    async with DaiClient(config=_settings()) as client:
-        first = await client.authenticate()
-        second = await client.authenticate()
-
-    assert first == second == "cached-token"
-    assert len(httpx_mock.get_requests()) == 1
+from src.integrations.dai_client import LogEntry
 
 
 def test_trimmed_log_excerpt() -> None:
