@@ -104,22 +104,33 @@ async def test_get_ticket_sends_auth_and_returns_complete_payload(
 
 
 @pytest.mark.asyncio
-async def test_post_comment_sends_body_and_returns_comment(
+@pytest.mark.parametrize(
+    ("status_code", "response_body"),
+    [
+        pytest.param(201, b'{"id":"101"}', id="json"),
+        pytest.param(204, b"", id="empty"),
+        pytest.param(201, b"{malformed", id="malformed-json"),
+    ],
+)
+async def test_post_comment_accepts_any_successful_response_body(
     httpx_mock: HTTPXMock,
+    status_code: int,
+    response_body: bytes,
 ) -> None:
-    comment = {"id": "101", "body": "*Diagnosis* body"}
     httpx_mock.add_response(
         method="POST",
         url=f"{ISSUE_URL}/comment",
-        status_code=201,
-        json=comment,
+        status_code=status_code,
+        content=response_body,
     )
 
     async with JiraClient(config=_settings()) as client:
         result = await client.post_comment(TICKET_KEY, "*Diagnosis* body")
 
-    assert result == comment
-    assert httpx_mock.get_request().read() == b'{"body":"*Diagnosis* body"}'
+    assert result is None
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 1
+    assert requests[0].read() == b'{"body":"*Diagnosis* body"}'
 
 
 @pytest.mark.asyncio

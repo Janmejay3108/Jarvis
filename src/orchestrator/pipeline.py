@@ -484,35 +484,27 @@ class DiagnosisPipeline:
 						"source": "diagnosis_artifact",
 					},
 				)
-				try:
-					diagnosis = (
-						run.diagnosis
-						if run.diagnosis is not None
-						else {}
-					)
-					body = self._format_for_jira(
-						diagnosis,
+				diagnosis = (
+					run.diagnosis
+					if run.diagnosis is not None
+					else {}
+				)
+				body = self._format_for_jira(
+					diagnosis,
+					run.ticket_key,
+				)
+				body = append_jira_action_footer(
+					body,
+					str(comment["action_id"]),
+				)
+				comment_state = await self._attempt_jira_write(
+					run,
+					str(comment["action_id"]),
+					lambda: self._jira.post_comment(
 						run.ticket_key,
-					)
-					body = append_jira_action_footer(
 						body,
-						str(comment["action_id"]),
-					)
-				except Exception:  # noqa: BLE001
-					comment_state = await self._finish_jira_action(
-						run,
-						str(comment["action_id"]),
-						"failed",
-					)
-				else:
-					comment_state = await self._attempt_jira_write(
-						run,
-						str(comment["action_id"]),
-						lambda: self._jira.post_comment(
-							run.ticket_key,
-							body,
-						),
-					)
+					),
+				)
 
 				label = await self._create_jira_action(
 					run,

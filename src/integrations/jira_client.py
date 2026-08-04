@@ -105,15 +105,14 @@ class JiraClient:
         response = await self._read_request("GET", f"/rest/api/2/issue/{key}")
         return response.json()
 
-    async def post_comment(self, key: str, body: str) -> dict[str, Any]:
-        response = await self._write_request(
+    async def post_comment(self, key: str, body: str) -> None:
+        await self._write_request(
             "POST",
             f"/rest/api/2/issue/{key}/comment",
             operation="post_comment",
             ticket_key=key,
             json={"body": body},
         )
-        return response.json()
 
     async def add_label(self, key: str, label: str) -> None:
         await self._write_request(
