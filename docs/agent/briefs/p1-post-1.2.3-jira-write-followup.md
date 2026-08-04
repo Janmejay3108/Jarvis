@@ -32,12 +32,16 @@ specification for this follow-up:
 
 ## 2. Branch and base
 
-- Base: local `master` at `6e06fd00fa39b11cf33820cf8ca56e51b19012e5`.
+- Base: clean local `master` containing this brief. Capture its immutable SHA before creating the
+  branch: `$baseSha = git rev-parse HEAD`.
 - Branch: `build/1.2.3-jira-write-followup`.
 - Commit once with message `fix: preserve Jira write truthfulness`.
 
-Before editing, run `git status --short --branch` and `git rev-parse HEAD`. Stop and report if the
-worktree is dirty or HEAD is not the pinned base. Do not fetch, pull, rebase, push, or merge.
+Before editing, run `git status --short --branch`, confirm the branch is `master`, capture
+`$baseSha`, and confirm `git cat-file -e "${baseSha}:docs/agent/briefs/p1-post-1.2.3-jira-write-followup.md"`
+succeeds. Stop and report if the worktree is dirty or the brief is absent from the captured base.
+Then create the build branch from that exact HEAD. Keep `$baseSha` for final verification. Do not
+fetch, pull, rebase, push, or merge.
 
 ## 3. Per-file specification
 
@@ -164,7 +168,7 @@ python -m ruff check src/integrations/jira_client.py src/orchestrator/pipeline.p
 python -m pytest -q
 python -m ruff check .
 git diff --check
-git diff --name-only 6e06fd00fa39b11cf33820cf8ca56e51b19012e5...HEAD
+git diff --name-only "$baseSha...HEAD"
 ```
 
 Expected results:
