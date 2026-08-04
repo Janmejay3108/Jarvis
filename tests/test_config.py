@@ -46,7 +46,68 @@ def test_track_loader() -> None:
     assert track.jarvis.branch == "Enovia"
     assert track.jarvis.run_timeout == 7200
     assert track.dai.base_url == "http://epcorpappsdai12.cos.is.keysight.com:8000"
+    assert track.llm.context_path == "tracks/enovia/context.md"
+    assert track.budget_usd_per_run == 10.0
     assert track.validation.max_attempts == 3
+
+    price = track.llm.prices[track.llm.model]
+    assert price.input_per_million == 5.0
+    assert price.output_per_million == 25.0
+    assert price.cache_write_5m_per_million == 6.25
+    assert price.cache_read_per_million == 0.5
+
+
+def _write_track_config(tmp_path: Path, raw_config: dict[str, object]) -> Path:
+    config_path = tmp_path / "enovia.yaml"
+    config_path.write_text(
+        yaml.safe_dump(raw_config, sort_keys=False),
+        encoding="utf-8",
+    )
+    return config_path
+
+
+def test_track_loader_requires_default_model_price(tmp_path: Path) -> None:
+    raw_config = yaml.safe_load(
+        Path("config/enovia.yaml").read_text(encoding="utf-8")
+    )
+    raw_config["llm"]["prices"].clear()
+
+    with pytest.raises(ValidationError, match="no price entry"):
+        load_track(str(_write_track_config(tmp_path, raw_config)))
+
+
+@pytest.mark.parametrize("invalid_rate", [-1, float("nan"), float("inf")])
+def test_track_loader_rejects_invalid_llm_rates(
+    tmp_path: Path,
+    invalid_rate: float,
+) -> None:
+    raw_config = yaml.safe_load(
+        Path("config/enovia.yaml").read_text(encoding="utf-8")
+    )
+    raw_config["llm"]["prices"]["claude-opus-4-7"][
+        "input_per_million"
+    ] = invalid_rate
+
+    with pytest.raises(ValidationError):
+        load_track(str(_write_track_config(tmp_path, raw_config)))
+
+
+@pytest.mark.parametrize("mutation", ["missing", "extra"])
+def test_track_loader_rejects_invalid_llm_price_shape(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    raw_config = yaml.safe_load(
+        Path("config/enovia.yaml").read_text(encoding="utf-8")
+    )
+    price = raw_config["llm"]["prices"]["claude-opus-4-7"]
+    if mutation == "missing":
+        price.pop("cache_read_per_million")
+    else:
+        price["unexpected_rate"] = 1.0
+
+    with pytest.raises(ValidationError):
+        load_track(str(_write_track_config(tmp_path, raw_config)))
 
 
 def test_registry_loader() -> None:

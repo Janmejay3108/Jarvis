@@ -5,7 +5,14 @@ from pathlib import Path
 from typing import Annotated
 
 import yaml
-from pydantic import AfterValidator, BaseModel, ConfigDict, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 def _reject_placeholder(value: str) -> str:
@@ -77,6 +84,18 @@ class JarvisConfig(BaseModel):
     test_config_registry: str
 
 
+FiniteNonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+
+
+class LlmPriceConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    input_per_million: FiniteNonNegativeFloat
+    output_per_million: FiniteNonNegativeFloat
+    cache_write_5m_per_million: FiniteNonNegativeFloat
+    cache_read_per_million: FiniteNonNegativeFloat
+
+
 class LlmConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -86,6 +105,8 @@ class LlmConfig(BaseModel):
     model_light: str | None = None
     engine_mode: str
     thinking_on_escalation: bool
+    context_path: str
+    prices: dict[str, LlmPriceConfig]
 
 
 class ValidationConfig(BaseModel):
@@ -116,6 +137,12 @@ class TrackConfig(BaseModel):
     validation: ValidationConfig
     approval_mode: str
     budget_usd_per_run: float
+
+    @model_validator(mode="after")
+    def require_default_model_price(self) -> TrackConfig:
+        if self.llm.model not in self.llm.prices:
+            raise ValueError("configured default LLM model has no price entry")
+        return self
 
 
 class SuiteRegistryEntry(BaseModel):
